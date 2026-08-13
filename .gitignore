@@ -1,0 +1,36 @@
+# Data + build artifacts. Only the repo-root data/ tree is regenerable:
+#   scripts/prepare_data.py  -> data/slim
+#   ragoa/data/docbuilder.py -> data/corpus
+#   scripts/build_index.py   -> data/index
+# Anchored at / so ragoa/data/ (the Python package) is not ignored.
+/data/
+artifacts/
+*.parquet
+*.bin
+*.npy
+*.npz
+*.hnsw
+*.faiss
+
+# Python
+.venv/
+.venv-probe/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Env + secrets
+.env
+.env.local
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+
+# OS / editor
+.DS_Store
