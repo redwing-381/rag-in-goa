@@ -128,6 +128,37 @@ class TestGates:
         assert response.refused
         assert response.refusal_reason is RefusalReason.UNSAFE_INPUT
 
+    def test_unanswerable_prose_is_not_grounded_not_a_claim(self):
+        stub = StubLLM(answer="I do not have that information.")
+        pipeline, _ = build(stub)
+        response = pipeline.ask(AskRequest(query="who invented the flux capacitor"))
+        assert response.refused
+        assert response.refusal_reason is RefusalReason.NOT_GROUNDED
+        assert response.groundedness is None
+
+    def test_unanswerable_retries_when_evidence_matches(self):
+        class FlipLLM:
+            def __init__(self):
+                self.calls = 0
+
+            def answer(self, query, retrieved, language=Language.EN):
+                self.calls += 1
+                top = retrieved[0]
+                if self.calls == 1:
+                    text = "I do not have that information."
+                else:
+                    text = " ".join(top.chunk.text.split()[:25])
+                return AnswerPayload(
+                    answer=text, citations=[top.chunk.chunk_id], confidence=0.85,
+                    answer_language=language,
+                ), 12.0
+
+        stub = FlipLLM()
+        pipeline, _ = build(stub)
+        response = pipeline.ask(AskRequest(query="what is a corporation"))
+        assert stub.calls == 2
+        assert not response.refused
+
     def test_low_confidence_is_refused(self):
         stub = StubLLM()
         original = stub.answer
