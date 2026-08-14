@@ -1,0 +1,16 @@
+.venv
+.git
+.cursor
+apps/web
+notebooks
+tests
+bench
+data/raw
+data/slim
+data/audio
+data/index-test
+data/corpus
+**/__pycache__
+**/*.pyc
+ragoa-src.zip
+*.tar.gz

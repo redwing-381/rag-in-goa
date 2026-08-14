@@ -76,7 +76,7 @@ def build_retriever(index_dir: Path, encoder_kind: str, use_rerank: bool,
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--index-dir", default=str(settings.index_dir))
-    ap.add_argument("--encoder", choices=["st", "hash"], default="st")
+    ap.add_argument("--encoder", choices=["st", "onnx", "hash"], default="st")
     ap.add_argument("--queries", type=int, default=300)
     ap.add_argument("--lang", default=None)
     ap.add_argument("--warmup", type=int, default=10)
