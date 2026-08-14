@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import type { Trace } from "@/lib/types";
 
 /**
@@ -37,6 +39,7 @@ const DEGRADATION_COPY: Record<string, string> = {
 const EXTERNAL_STAGES = new Set(["stt", "stt_error", "llm"]);
 
 export function TracePanel({ trace, budgetMs }: { trace: Trace; budgetMs: number }) {
+  const [open, setOpen] = useState(false);
   const retrieval = trace.spans.filter((span) => !EXTERNAL_STAGES.has(span.name));
   const external = trace.spans.filter((span) => EXTERNAL_STAGES.has(span.name));
   const slowest = Math.max(...trace.spans.map((span) => span.duration_ms), 1);
@@ -45,10 +48,33 @@ export function TracePanel({ trace, budgetMs }: { trace: Trace; budgetMs: number
 
   return (
     <section className="rounded-2xl border border-edge bg-surface/60 p-5">
-      <header className="mb-4 flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-semibold tracking-wide text-white/80 uppercase">
-          Latency trace
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-baseline justify-between gap-3 text-left"
+      >
+        <h2 className="text-sm font-semibold tracking-wide text-white/80">
+          How long that took
+          <span className={`ml-2 font-normal ${withinBudget ? "text-mint" : "text-warm"}`}>
+            · {trace.retrieval_ms.toFixed(0)} ms retrieval
+          </span>
         </h2>
+        <span className="text-[11px] text-white/35">{open ? "hide" : "show"}</span>
+      </button>
+
+      {!open && (
+        <p className="mt-2 text-xs text-white/35">
+          {withinBudget ? "Inside the 200 ms budget." : "Over the 200 ms budget."}
+          {trace.llm_ttft_ms !== null && ` Generation ${trace.llm_ttft_ms.toFixed(0)} ms.`}
+        </p>
+      )}
+
+      {open && (
+        <>
+      <header className="mb-4 mt-4 flex items-baseline justify-between gap-3">
+        <p className="text-[11px] font-semibold tracking-wider text-white/35 uppercase">
+          Latency trace
+        </p>
         <code className="text-[11px] text-white/35">{trace.request_id}</code>
       </header>
 
@@ -100,6 +126,8 @@ export function TracePanel({ trace, budgetMs }: { trace: Trace; budgetMs: number
             declared order; the budget held.
           </p>
         </div>
+      )}
+        </>
       )}
     </section>
   );
