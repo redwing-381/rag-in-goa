@@ -6,7 +6,8 @@ for the HH Goa 2026 shortlisting task.
 Speak (or type) a question in English, Hindi, Bengali, Tamil, or Marathi.
 Sarvam transcribes it to English, hybrid retrieval finds supporting passages
 in under 200 ms, and a harnessed LLM answers only from those passages — or
-refuses.
+refuses. The first screen has tap-to-ask examples so you do not have to
+invent a question the corpus can answer.
 
 ## Retrieval latency
 
@@ -27,9 +28,14 @@ Speech-to-text and generation are reported separately; they are remote APIs.
 - **Chunking:** six strategies; shipped default is script-aware 1800 / 200.
 - **Index:** 215,608 chunks, 97,941 validation documents, HNSW + BM25.
 - **Harness:** OpenRouter structured JSON, retries, circuit breaker, ordinal citations.
+  If the model writes “I do not have that information” but the retrieved
+  passages actually mention the question, it is asked once more before we refuse.
 - **Guardrails:** unsafe / injection / unintelligible input; out-of-domain;
-  ungrounded or badly cited output.
-- **UI:** Next.js mic capture, answer + sources, per-stage trace.
+  ungrounded or badly cited output. A model “I don’t know” is a clean refusal,
+  not a groundedness failure on that sentence.
+- **UI:** Next.js mic capture, sample questions, named wait stages, spoken
+  answers when the browser has a voice, short sources, and a collapsed
+  latency trace.
 
 Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -48,6 +54,14 @@ cd apps/web && npm install && NEXT_PUBLIC_API_URL=http://127.0.0.1:8000 npm run 
 
 Open http://localhost:3000. Rebuild the index on a GPU with
 [`notebooks/build_index_colab.ipynb`](notebooks/build_index_colab.ipynb).
+
+Questions that work well on this index:
+
+- what type of mountain is Mount Fuji
+- who was Bridget Moynahan married to
+- what is Kinsey most known for
+- definition of philosophy
+- என்ன வகையான மலை எம்டி ஃபுஜி? (set the language to Tamil)
 
 ## Deploy
 
