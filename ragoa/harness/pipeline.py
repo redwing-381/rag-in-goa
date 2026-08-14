@@ -21,7 +21,7 @@ import uuid
 
 from ragoa.config import Settings
 from ragoa.guardrails.input_gate import InputGate
-from ragoa.guardrails.output_gate import OutputGate
+from ragoa.guardrails.output_gate import OutputGate, content_words
 from ragoa.harness.llm import OpenRouterLLM
 from ragoa.index.retriever import HybridRetriever
 from ragoa.schemas import (
@@ -108,6 +108,37 @@ _SAFETY_SELF_REFUSAL = re.compile(
 
 def looks_like_safety_refusal(text: str) -> bool:
     return bool(_SAFETY_SELF_REFUSAL.search(text or ""))
+
+
+# The system prompt tells the model to say this when the passages do not answer.
+# That sentence is not a claim about the world, so running it through the
+# groundedness gate produces "unsupported: I do not have that information."
+_UNANSWERABLE = re.compile(
+    r"\b(i (do not|don't) have (that |this |the )?information|"
+    r"i (do not|don't) know|"
+    r"(the )?(provided )?context does not|"
+    r"none of the (passages|context)|"
+    r"no (relevant )?information (in|about))\b",
+    re.IGNORECASE,
+)
+
+
+def looks_like_unanswerable(text: str) -> bool:
+    return bool(_UNANSWERABLE.search(text or ""))
+
+
+def evidence_overlaps_query(query: str, retrieved: list[RetrievedChunk]) -> bool:
+    """True when the retrieved text shares at least two content words with the query.
+
+    Used to decide whether a model 'I do not know' is worth one retry: if the
+    passages never mentioned the subject, retrying will not help.
+    """
+    wanted = content_words(query)
+    if not wanted:
+        return False
+    evidence = " ".join((item.expanded_text or item.chunk.text) for item in retrieved)
+    need = 2 if len(wanted) >= 2 else 1
+    return len(wanted & content_words(evidence)) >= need
 
 
 def refusal_message(reason: RefusalReason, language: Language) -> str:
@@ -227,6 +258,19 @@ class RagPipeline:
         # Generation. Measured separately from retrieval, on purpose.
         with timed(trace, "llm"):
             payload, llm_ms = self.llm.answer(request.query, retrieved, language)
+            # One retry when the model claims the passages are empty but they
+            # actually mention the question. Cheap compared to a false refusal
+            # on a question the index can answer (Kinsey, Fuji, etc.).
+            if (
+                looks_like_unanswerable(payload.answer)
+                and payload.refusal_reason is None
+                and evidence_overlaps_query(request.query, retrieved)
+            ):
+                retried, retry_ms = self.llm.answer(request.query, retrieved, language)
+                llm_ms += retry_ms
+                if not looks_like_unanswerable(retried.answer):
+                    payload = retried
+                    trace.add("llm_retry", retry_ms, reason="unanswerable_with_evidence")
         trace.llm_ttft_ms = llm_ms
 
         # The model may decline on its own; respect that rather than overriding it.
@@ -237,6 +281,11 @@ class RagPipeline:
             trace.add("refused", 0.0, reason=RefusalReason.UNSAFE_INPUT.value,
                       via="model_self_refusal")
             return self._refuse(RefusalReason.UNSAFE_INPUT, language, trace)
+
+        if looks_like_unanswerable(payload.answer):
+            trace.add("refused", 0.0, reason=RefusalReason.NOT_GROUNDED.value,
+                      via="model_unanswerable")
+            return self._refuse(RefusalReason.NOT_GROUNDED, language, trace)
 
         if payload.confidence < self.settings.min_answer_confidence:
             reason = (
