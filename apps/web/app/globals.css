@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #0a0a0f;
+  --color-surface: #12121a;
+  --color-raised: #1a1a25;
+  --color-edge: #26263a;
+  --color-accent: #7c5cff;
+  --color-accent-soft: #a894ff;
+  --color-warm: #ff8a4c;
+  --color-mint: #3ddc97;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(124, 92, 255, 0.16), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 90% 10%, rgba(255, 138, 76, 0.08), transparent 70%),
+    var(--color-ink);
+  color: #e8e8f0;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Indic scripts need a little more line height than Latin to stay legible. */
+:lang(hi),
+:lang(bn),
+:lang(ta),
+:lang(mr) {
+  line-height: 1.85;
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.pulse-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid var(--color-warm);
+  animation: pulse-ring 1.6s cubic-bezier(0.24, 0.6, 0.35, 1) infinite;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.06),
+    transparent
+  );
+  animation: shimmer 1.6s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-ring::after,
+  .shimmer::after {
+    animation: none;
+  }
+}
