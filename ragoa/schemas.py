@@ -240,6 +240,18 @@ class Citation(BaseModel):
     score: float
 
 
+class HistoryTurn(BaseModel):
+    """One prior utterance. Retrieval ignores this; the LLM prompt does not."""
+
+    role: str = Field(pattern=r"^(user|assistant)$")
+    text: str = Field(min_length=1, max_length=4000)
+
+
+class SpeakRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2500)
+    lang: Language = Language.EN
+
+
 class AskRequest(BaseModel):
     query: str
     lang: Language = Language.EN
@@ -248,6 +260,7 @@ class AskRequest(BaseModel):
     budget_ms: float = Field(default=200.0, gt=0)
     strategy: ChunkingStrategy | None = None
     stream: bool = False
+    history: list[HistoryTurn] = Field(default_factory=list, max_length=8)
 
 
 class AnswerPayload(BaseModel):

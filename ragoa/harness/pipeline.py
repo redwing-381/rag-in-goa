@@ -17,12 +17,14 @@ number we would then have to explain away.
 from __future__ import annotations
 
 import re
+import time
 import uuid
+from collections.abc import Iterator
 
 from ragoa.config import Settings
 from ragoa.guardrails.input_gate import InputGate
 from ragoa.guardrails.output_gate import OutputGate, content_words
-from ragoa.harness.llm import OpenRouterLLM
+from ragoa.harness.llm import OpenRouterLLM, citations_from_prose, resolve_citations
 from ragoa.index.retriever import HybridRetriever
 from ragoa.schemas import (
     AnswerPayload,
@@ -211,68 +213,206 @@ class RagPipeline:
         Sarvam runs in translate mode, so `transcript` is English while `language`
         stays the language the user spoke and drives the answer language.
         """
+        final = None
+        for event in self.ask_audio_iter(audio, language=language, filename=filename, **kwargs):
+            if event["type"] == "final":
+                final = event["response"]
+        assert final is not None
+        return final
+
+    def ask(self, request: AskRequest, trace: Trace | None = None,
+            stt: STTResult | None = None) -> AskResponse:
+        final = None
+        for event in self.ask_iter(request, trace=trace, stt=stt, stream=False):
+            if event["type"] == "final":
+                final = event["response"]
+        assert final is not None
+        return final
+
+    def ask_audio_iter(
+        self,
+        audio: bytes,
+        language: Language = Language.EN,
+        filename: str = "audio.wav",
+        **kwargs,
+    ) -> Iterator[dict]:
+        """Yield transcript, then the same events as `ask_iter`."""
         trace = Trace(request_id=uuid.uuid4().hex[:12])
         try:
             stt = self.transcribe(audio, filename, trace)
         except Exception as exc:
             trace.add("stt_error", 0.0, error=str(exc)[:120])
-            return self._refuse(RefusalReason.UNINTELLIGIBLE_AUDIO, language, trace,
-                                detail=str(exc))
+            yield {"type": "stage", "name": "stt_error", "duration_ms": 0.0}
+            yield {
+                "type": "final",
+                "response": self._refuse(
+                    RefusalReason.UNINTELLIGIBLE_AUDIO, language, trace, detail=str(exc)
+                ),
+            }
+            return
 
-        response = self.ask(
-            AskRequest(query=stt.text, lang=language, **kwargs), trace=trace, stt=stt
-        )
-        response.transcript = stt.text
-        return response
+        yield {"type": "stage", "name": "stt",
+               "duration_ms": next((s.duration_ms for s in trace.spans if s.name == "stt"), 0.0)}
+        yield {"type": "transcript", "text": stt.text}
+        request = AskRequest(query=stt.text, lang=language, **kwargs)
+        for event in self.ask_iter(request, trace=trace, stt=stt, stream=True):
+            if event["type"] == "final":
+                event["response"].transcript = stt.text
+            yield event
 
-    def ask(self, request: AskRequest, trace: Trace | None = None,
-            stt: STTResult | None = None) -> AskResponse:
+    def ask_iter(
+        self,
+        request: AskRequest,
+        trace: Trace | None = None,
+        stt: STTResult | None = None,
+        *,
+        stream: bool = True,
+    ) -> Iterator[dict]:
+        """Yield `stage`, `token`, and a terminal `final` event for one turn."""
         trace = trace or Trace(request_id=uuid.uuid4().hex[:12])
         language = request.lang
+        seen = 0
+
+        def flush_stages() -> list[dict]:
+            nonlocal seen
+            events = [
+                {"type": "stage", "name": span.name, "duration_ms": span.duration_ms}
+                for span in trace.spans[seen:]
+            ]
+            seen = len(trace.spans)
+            return events
 
         # Gate 1: cheap input checks, before spending any budget.
         with timed(trace, "input_gate"):
             verdict: GuardrailVerdict = self.input_gate.check(request.query, stt)
+        yield from flush_stages()
         if not verdict.allowed:
             trace.add("refused", 0.0, reason=verdict.reason.value if verdict.reason else "")
-            return self._refuse(verdict.reason or RefusalReason.UNSAFE_INPUT,
-                                language, trace, verdict.detail)
+            yield from flush_stages()
+            yield {
+                "type": "final",
+                "response": self._refuse(
+                    verdict.reason or RefusalReason.UNSAFE_INPUT,
+                    language, trace, verdict.detail,
+                ),
+            }
+            return
 
-        # Retrieval, under its own hard deadline.
+        # Retrieval, under its own hard deadline. This turn's query only.
         deadline = Deadline(request.budget_ms)
         retrieved = self.retriever.retrieve(
             request.query, deadline, trace,
             top_k=request.top_k, candidates=request.candidates,
         )
+        yield from flush_stages()
 
         # Gate 2: is anything in the corpus actually close enough to answer from?
         with timed(trace, "domain_gate"):
             top_score = self.retriever.top_score(retrieved)
             domain = self.input_gate.check_domain(top_score)
+        yield from flush_stages()
         if not domain.allowed:
             trace.add("refused", 0.0, reason=RefusalReason.OUT_OF_DOMAIN.value,
                       top_score=top_score)
-            return self._refuse(RefusalReason.OUT_OF_DOMAIN, language, trace,
-                                domain.detail)
+            yield from flush_stages()
+            yield {
+                "type": "final",
+                "response": self._refuse(
+                    RefusalReason.OUT_OF_DOMAIN, language, trace, domain.detail
+                ),
+            }
+            return
 
-        # Generation. Measured separately from retrieval, on purpose.
-        with timed(trace, "llm"):
-            payload, llm_ms = self.llm.answer(request.query, retrieved, language)
-            # One retry when the model claims the passages are empty but they
-            # actually mention the question. Cheap compared to a false refusal
-            # on a question the index can answer (Kinsey, Fuji, etc.).
-            if (
-                looks_like_unanswerable(payload.answer)
-                and payload.refusal_reason is None
-                and evidence_overlaps_query(request.query, retrieved)
-            ):
-                retried, retry_ms = self.llm.answer(request.query, retrieved, language)
-                llm_ms += retry_ms
-                if not looks_like_unanswerable(retried.answer):
-                    payload = retried
-                    trace.add("llm_retry", retry_ms, reason="unanswerable_with_evidence")
+        payload, llm_ms = yield from self._generate(
+            request, retrieved, language, trace, stream=stream,
+        )
         trace.llm_ttft_ms = llm_ms
+        yield from flush_stages()
 
+        response = self._after_generation(payload, retrieved, language, trace)
+        yield from flush_stages()
+        yield {"type": "final", "response": response}
+
+    def _generate(
+        self,
+        request: AskRequest,
+        retrieved: list[RetrievedChunk],
+        language: Language,
+        trace: Trace,
+        *,
+        stream: bool,
+    ) -> Iterator[dict]:
+        """Yield token events; return (payload, llm_ms) via StopIteration.value."""
+        history = request.history
+        started = time.perf_counter()
+        payload: AnswerPayload | None = None
+        collected: list[str] = []
+
+        if stream:
+            stream_fn = getattr(self.llm, "stream", None)
+            if stream_fn is not None:
+                try:
+                    for delta in stream_fn(
+                        request.query, retrieved, language, history=history
+                    ):
+                        if delta:
+                            collected.append(delta)
+                            yield {"type": "token", "text": delta}
+                except Exception:
+                    collected = []
+
+        if collected:
+            full = "".join(collected)
+            parsed = None
+            parse = getattr(self.llm, "_parse", None)
+            if parse is not None:
+                parsed = parse(full)
+            if parsed is not None:
+                payload = parsed
+            else:
+                payload = AnswerPayload(
+                    answer=full.strip(),
+                    citations=citations_from_prose(full),
+                    confidence=0.7,
+                    answer_language=language,
+                )
+            payload.citations = resolve_citations(payload.citations, retrieved)
+            llm_ms = (time.perf_counter() - started) * 1000.0
+            trace.add("llm", llm_ms)
+        else:
+            with timed(trace, "llm"):
+                payload, llm_ms = self.llm.answer(
+                    request.query, retrieved, language, history=history
+                )
+                if payload.answer:
+                    yield {"type": "token", "text": payload.answer}
+
+        # One retry when the model claims the passages are empty but they
+        # actually mention the question. Cheap compared to a false refusal
+        # on a question the index can answer (Kinsey, Fuji, etc.).
+        if (
+            looks_like_unanswerable(payload.answer)
+            and payload.refusal_reason is None
+            and evidence_overlaps_query(request.query, retrieved)
+        ):
+            retried, retry_ms = self.llm.answer(
+                request.query, retrieved, language, history=history
+            )
+            llm_ms += retry_ms
+            if not looks_like_unanswerable(retried.answer):
+                payload = retried
+                trace.add("llm_retry", retry_ms, reason="unanswerable_with_evidence")
+                yield {"type": "token", "text": payload.answer}
+
+        return payload, llm_ms
+
+    def _after_generation(
+        self,
+        payload: AnswerPayload,
+        retrieved: list[RetrievedChunk],
+        language: Language,
+        trace: Trace,
+    ) -> AskResponse:
         # The model may decline on its own; respect that rather than overriding it.
         if payload.refusal_reason is not None:
             return self._refuse(payload.refusal_reason, language, trace)

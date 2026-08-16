@@ -6,6 +6,7 @@ from ragoa.harness.llm import (
     CircuitBreaker,
     OpenRouterLLM,
     build_context,
+    citations_from_prose,
     language_matches,
     resolve_citations,
     script_ratio,
@@ -115,6 +116,9 @@ class TestCitationResolution:
         self.retrieved = [make_retrieved("d1#s#0", "Alpha."),
                           make_retrieved("d1#s#1", "Beta."),
                           make_retrieved("d1#s#2", "Gamma.")]
+
+    def test_inline_brackets_from_streamed_prose(self):
+        assert citations_from_prose("Fuji is a volcano [1] in Japan [3].") == ["1", "3"]
 
     def test_ordinals_become_chunk_ids(self):
         assert resolve_citations(["1", "3"], self.retrieved) == ["d1#s#0", "d1#s#2"]

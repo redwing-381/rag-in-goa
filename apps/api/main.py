@@ -9,16 +9,19 @@ warms the caches.
 
 from __future__ import annotations
 
+import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from sse_starlette.sse import EventSourceResponse
 
 from ragoa.config import settings
 from ragoa.factory import build_pipeline
-from ragoa.schemas import AskRequest, AskResponse, Language, Trace
+from ragoa.schemas import AskRequest, AskResponse, HistoryTurn, Language, SpeakRequest, Trace
 
 STATE: dict = {}
 
@@ -45,6 +48,10 @@ async def lifespan(app: FastAPI):
     )
     STATE["pipeline"] = pipeline
     STATE["manifest"] = manifest
+    if settings.sarvam_api_key:
+        from ragoa.tts.sarvam import SarvamTTS
+
+        STATE["tts"] = SarvamTTS(settings)
 
     # Warm up: touch every stage so nothing initialises lazily on a user request.
     warm = pipeline.ask(AskRequest(query="what is a corporation", top_k=3))
@@ -54,6 +61,9 @@ async def lifespan(app: FastAPI):
           f"warmup {warm.trace.total_ms:.0f} ms", flush=True)
 
     yield
+    tts = STATE.get("tts")
+    if tts is not None:
+        tts.close()
     STATE.clear()
 
 
@@ -86,6 +96,7 @@ def health() -> dict:
         "has_sparse": manifest.get("has_sparse"),
         "warmup_ms": STATE.get("warmup_ms"),
         "retrieval_budget_ms": settings.retrieval_budget_ms,
+        "has_tts": STATE.get("tts") is not None,
     }
 
 
@@ -117,6 +128,71 @@ async def ask_audio(
     )
 
 
+def _sse(event: dict) -> dict:
+    kind = event["type"]
+    if kind == "final":
+        return {"event": "final", "data": event["response"].model_dump_json()}
+    payload = {key: value for key, value in event.items() if key != "type"}
+    return {"event": kind, "data": json.dumps(payload)}
+
+
+def _parse_history(raw: str) -> list[HistoryTurn]:
+    if not raw or raw == "[]":
+        return []
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"invalid history: {exc}") from exc
+    if not isinstance(parsed, list):
+        raise HTTPException(status_code=400, detail="history must be a JSON list")
+    try:
+        return [HistoryTurn.model_validate(item) for item in parsed[:8]]
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"invalid history: {exc}") from exc
+
+
+@app.post("/ask/stream")
+def ask_stream(request: AskRequest) -> EventSourceResponse:
+    """One turn as SSE: stage, token, then a final AskResponse."""
+    pipeline = get_pipeline()
+
+    def events():
+        for event in pipeline.ask_iter(request, stream=True):
+            yield _sse(event)
+
+    return EventSourceResponse(events())
+
+
+@app.post("/ask/audio/stream")
+async def ask_audio_stream(
+    file: UploadFile = File(..., description="16 kHz mono WAV, at most 30 seconds"),
+    lang: Language = Form(Language.EN),
+    top_k: int = Form(settings.top_k),
+    history: str = Form("[]"),
+) -> EventSourceResponse:
+    """Speech in, then the same SSE events as /ask/stream, plus a transcript event."""
+    audio = await file.read()
+    if not audio:
+        raise HTTPException(status_code=400, detail="empty audio upload")
+
+    pipeline = get_pipeline()
+    if pipeline.stt is None:
+        raise HTTPException(
+            status_code=503,
+            detail="speech-to-text is not configured; set SARVAM_API_KEY",
+        )
+    turns = _parse_history(history)
+    filename = file.filename or "audio.wav"
+
+    def events():
+        for event in pipeline.ask_audio_iter(
+            audio, language=lang, filename=filename, top_k=top_k, history=turns
+        ):
+            yield _sse(event)
+
+    return EventSourceResponse(events())
+
+
 @app.get("/config")
 def config() -> dict:
     """Non-secret settings, so the UI can display the active configuration."""
@@ -127,6 +203,9 @@ def config() -> dict:
         "llm_providers": settings.llm_providers,
         "stt_model": settings.sarvam_stt_model,
         "stt_mode": settings.sarvam_stt_mode,
+        "tts_model": settings.sarvam_tts_model,
+        "tts_speaker": settings.sarvam_tts_speaker,
+        "has_tts": STATE.get("tts") is not None,
         "top_k": settings.top_k,
         "dense_candidates": settings.dense_candidates,
         "rerank_candidates": settings.rerank_candidates,
@@ -135,6 +214,24 @@ def config() -> dict:
         "groundedness_threshold": settings.groundedness_threshold,
         "languages": [lang.value for lang in Language],
     }
+
+
+@app.post("/speak")
+def speak(request: SpeakRequest) -> Response:
+    """One phrase as WAV. The key stays on the server; the browser only plays audio."""
+    tts = STATE.get("tts")
+    if tts is None:
+        raise HTTPException(
+            status_code=503,
+            detail="text-to-speech is not configured; set SARVAM_API_KEY",
+        )
+    from ragoa.tts.sarvam import TTSError
+
+    try:
+        audio = tts.synthesize(request.text, request.lang)
+    except TTSError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return Response(content=audio, media_type="audio/wav")
 
 
 @app.get("/trace/example", response_model=Trace)

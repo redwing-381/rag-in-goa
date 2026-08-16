@@ -160,6 +160,12 @@ def build_context(retrieved: list[RetrievedChunk], max_chars: int = 6000) -> str
 
 
 _ORDINAL_RE = re.compile(r"\d+")
+_BRACKET_CITE = re.compile(r"\[(\d+)\]")
+
+
+def citations_from_prose(text: str) -> list[str]:
+    """Passage numbers the model mentioned inline, e.g. [1] or [3]."""
+    return list(dict.fromkeys(_BRACKET_CITE.findall(text or "")))
 
 
 def resolve_citations(
@@ -227,24 +233,40 @@ class OpenRouterLLM:
             }
         }
 
-    def _messages(self, query: str, context: str, language: Language) -> list[dict]:
-        return [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": (
-                    f"Context:\n{context}\n\n"
-                    f"Question: {query}\n"
-                    f"answer_language must be: {language.value}"
-                ),
-            },
-        ]
+    def _messages(
+        self,
+        query: str,
+        context: str,
+        language: Language,
+        history: list | None = None,
+        *,
+        prose: bool = False,
+    ) -> list[dict]:
+        messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        for turn in history or []:
+            role = getattr(turn, "role", None) or turn.get("role")
+            text = getattr(turn, "text", None) or turn.get("text")
+            if role in ("user", "assistant") and text:
+                messages.append({"role": role, "content": str(text)})
+        user = (
+            f"Context:\n{context}\n\n"
+            f"Question: {query}\n"
+            f"answer_language must be: {language.value}"
+        )
+        if prose:
+            user += (
+                "\n\nReply as plain prose, not JSON. Cite supporting passages "
+                "as [1] or [2]. Two or three sentences."
+            )
+        messages.append({"role": "user", "content": user})
+        return messages
 
     def answer(
         self,
         query: str,
         retrieved: list[RetrievedChunk],
         language: Language = Language.EN,
+        history: list | None = None,
     ) -> tuple[AnswerPayload, float]:
         """Return (payload, time_to_response_ms). Falls back rather than raising."""
         if self.breaker.is_open:
@@ -252,7 +274,7 @@ class OpenRouterLLM:
                                              "provider circuit open"), 0.0
 
         context = build_context(retrieved)
-        messages = self._messages(query, context, language)
+        messages = self._messages(query, context, language, history)
         started = time.perf_counter()
         last_error: Exception | None = None
         last_payload: AnswerPayload | None = None
@@ -321,6 +343,7 @@ class OpenRouterLLM:
         query: str,
         retrieved: list[RetrievedChunk],
         language: Language = Language.EN,
+        history: list | None = None,
     ) -> Iterator[str]:
         """Stream raw text deltas, for time-to-first-token in the demo.
 
@@ -331,10 +354,15 @@ class OpenRouterLLM:
         context = build_context(retrieved)
         stream = self.client.chat.completions.create(
             model=self.settings.llm_model,
-            messages=self._messages(query, context, language),
+            messages=self._messages(query, context, language, history, prose=True),
             max_tokens=self.settings.llm_max_tokens,
             temperature=self.settings.llm_temperature,
-            extra_body=self._extra_body(),
+            extra_body={
+                "provider": {
+                    "order": list(self.settings.llm_providers),
+                    "allow_fallbacks": True,
+                }
+            },
             stream=True,
         )
         for event in stream:

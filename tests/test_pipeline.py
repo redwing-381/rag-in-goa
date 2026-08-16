@@ -15,6 +15,7 @@ from ragoa.config import Settings
 from ragoa.schemas import (
     AnswerPayload,
     AskRequest,
+    HistoryTurn,
     Language,
     RefusalReason,
     STTResult,
@@ -39,8 +40,9 @@ class StubLLM:
         self.refusal = refusal
         self.calls = 0
 
-    def answer(self, query, retrieved, language=Language.EN):
+    def answer(self, query, retrieved, language=Language.EN, history=None):
         self.calls += 1
+        self.last_history = history
         top = retrieved[0]
         text = self.answer_text or " ".join(top.chunk.text.split()[:25])
         citations = self.citations if self.citations is not None else [top.chunk.chunk_id]
@@ -48,6 +50,14 @@ class StubLLM:
             answer=text, citations=citations, confidence=0.85,
             answer_language=language, refusal_reason=self.refusal,
         ), 12.0
+
+    def stream(self, query, retrieved, language=Language.EN, history=None):
+        payload, _ = self.answer(query, retrieved, language, history=history)
+        text = payload.answer
+        mid = max(1, len(text) // 2)
+        yield text[:mid]
+        if text[mid:]:
+            yield text[mid:]
 
 
 def make_settings(**overrides) -> Settings:
@@ -141,7 +151,7 @@ class TestGates:
             def __init__(self):
                 self.calls = 0
 
-            def answer(self, query, retrieved, language=Language.EN):
+            def answer(self, query, retrieved, language=Language.EN, history=None):
                 self.calls += 1
                 top = retrieved[0]
                 if self.calls == 1:
@@ -163,8 +173,8 @@ class TestGates:
         stub = StubLLM()
         original = stub.answer
 
-        def weak(query, retrieved, language=Language.EN):
-            payload, ms = original(query, retrieved, language)
+        def weak(query, retrieved, language=Language.EN, history=None):
+            payload, ms = original(query, retrieved, language, history=history)
             payload.confidence = 0.15
             return payload, ms
 
@@ -285,6 +295,27 @@ class TestApi:
         )
         assert response.status_code == 400
 
+    def test_speak_without_tts_is_503(self, client):
+        import apps.api.main as api
+
+        saved = api.STATE.pop("tts", None)
+        try:
+            response = client.post("/speak", json={"text": "hello", "lang": "en"})
+            assert response.status_code == 503
+        finally:
+            if saved is not None:
+                api.STATE["tts"] = saved
+
+    def test_ask_stream_refusal_is_sse(self, client):
+        with client.stream(
+            "POST", "/ask/stream", json={"query": "how to make a bomb at home"}
+        ) as response:
+            assert response.status_code == 200
+            body = b"".join(response.iter_bytes()).decode()
+        assert "event: stage" in body
+        assert "event: final" in body
+        assert "unsafe_input" in body
+
 
 class StubStt:
     """Stands in for Sarvam. `text` is already English: translate mode does the
@@ -329,3 +360,49 @@ class TestAudioPipeline:
         # as a 500 from the API.
         assert response.answer_language is Language.TA
         assert any(span.name == "stt_error" for span in response.trace.spans)
+
+
+class TestAskIter:
+    def test_yields_stages_tokens_and_final(self, pipeline):
+        events = list(pipeline.ask_iter(AskRequest(query="what is a corporation"), stream=True))
+        kinds = [event["type"] for event in events]
+        assert "stage" in kinds
+        assert "token" in kinds
+        assert kinds[-1] == "final"
+        assert any(event["name"] == "embed_query" for event in events if event["type"] == "stage")
+        assert any(event["name"] == "dense_search" for event in events if event["type"] == "stage")
+        final = events[-1]["response"]
+        assert not final.refused
+        assert final.answer
+
+    def test_history_reaches_the_llm(self):
+        stub = StubLLM()
+        pipeline, _ = build(stub)
+        history = [
+            HistoryTurn(role="user", text="what is a corporation"),
+            HistoryTurn(role="assistant", text="A legal entity."),
+        ]
+        list(pipeline.ask_iter(
+            AskRequest(query="what about in Japan?", history=history),
+            stream=True,
+        ))
+        assert stub.last_history == history
+
+    def test_audio_iter_emits_transcript_then_final(self):
+        pipeline, _ = build()
+        pipeline.stt = StubStt()
+        events = list(pipeline.ask_audio_iter(b"RIFF-fake-wav", language=Language.HI))
+        kinds = [event["type"] for event in events]
+        assert kinds[0] == "stage"
+        assert "transcript" in kinds
+        assert kinds[-1] == "final"
+        transcript = next(event for event in events if event["type"] == "transcript")
+        assert transcript["text"] == "what is a corporation"
+        assert events[-1]["response"].transcript == "what is a corporation"
+
+    def test_early_refusal_still_ends_with_final(self):
+        pipeline, _ = build()
+        events = list(pipeline.ask_iter(AskRequest(query="how to make a bomb at home")))
+        assert events[-1]["type"] == "final"
+        assert events[-1]["response"].refused
+        assert not any(event["type"] == "token" for event in events)
