@@ -15,12 +15,16 @@ export function AgentOrb({
   seconds,
   disabled,
   onToggle,
+  onStop,
+  showStop,
 }: {
   state: OrbState;
   level: number;
   seconds: number;
   disabled?: boolean;
   onToggle: () => void;
+  onStop?: () => void;
+  showStop?: boolean;
 }) {
   const listening = state === "listening";
   const scale = listening ? 1 + Math.min(level, 1) * 0.18 : 1;
@@ -51,10 +55,31 @@ export function AgentOrb({
           {listening ? `${seconds.toFixed(1)}s` : COPY[state]}
         </p>
         {listening && (
-          <p className="text-[11px] text-white/35">pause to send · tap to cut</p>
+          <p className="text-[11px] text-white/35">2s pause to send · say “goodbye” to end</p>
         )}
       </div>
+      {showStop && onStop && (
+        <button
+          type="button"
+          onClick={onStop}
+          aria-label="End chat"
+          className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-warm/50
+            bg-warm/10 px-3.5 py-1.5 text-xs font-medium text-warm
+            transition hover:border-warm hover:bg-warm/20"
+        >
+          <StopIcon />
+          End chat
+        </button>
+      )}
     </div>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
   );
 }
 

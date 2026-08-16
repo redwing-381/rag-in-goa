@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import resource
 import time
 from pathlib import Path
 
@@ -26,10 +25,7 @@ from ragoa.embed.encoder import HashEncoder, SentenceTransformerEncoder
 from ragoa.index.dense import DenseIndex
 from ragoa.index.sparse import SparseIndex
 from ragoa.index.store import ChunkStore, ChunkStoreBuilder
-
-
-def peak_rss_mb() -> float:
-    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6
+from ragoa.telemetry.rss import peak_rss_mb
 
 
 def build_store(index_dir: Path, source_lang: str, limit: int | None) -> tuple[int, int]:
