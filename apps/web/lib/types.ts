@@ -51,6 +51,22 @@ export interface GroundednessReport {
   invalid_citations: string[];
 }
 
+export interface HistoryTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
+export interface LiveStage {
+  name: string;
+  duration_ms: number;
+}
+
+export type StreamEvent =
+  | { type: "transcript"; text: string }
+  | { type: "stage"; name: string; duration_ms: number }
+  | { type: "token"; text: string }
+  | { type: "final"; response: AskResponse };
+
 export interface AskResponse {
   answer: string;
   refused: boolean;
@@ -72,6 +88,7 @@ export interface HealthResponse {
   has_sparse: boolean | null;
   warmup_ms: number | null;
   retrieval_budget_ms: number;
+  has_tts: boolean;
 }
 
 export const LANGUAGES: { code: Language; label: string; native: string }[] = [
