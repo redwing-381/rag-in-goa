@@ -2,37 +2,91 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { AnswerCard } from "@/components/AnswerCard";
-import { MicButton, useRecordingClock } from "@/components/MicButton";
+import { AgentOrb, type OrbState } from "@/components/AgentOrb";
+import { LiveStages } from "@/components/LiveStages";
+import { useRecordingClock } from "@/components/MicButton";
 import { SampleQuestions } from "@/components/SampleQuestions";
-import { ThinkingStages } from "@/components/ThinkingStages";
+import { SidebarHistory } from "@/components/SidebarHistory";
+import { CitationStrip, TranscriptPane } from "@/components/TranscriptPane";
 import { TracePanel } from "@/components/TracePanel";
-import { ApiError, askAudio, askText, health } from "@/lib/api";
-import { MicRecorder, RecorderError, createLevelMeter } from "@/lib/recorder";
-import { stopSpeaking } from "@/lib/speak";
-import { type AskResponse, type HealthResponse, LANGUAGES, type Language } from "@/lib/types";
+import { ApiError, askAudioStream, askStream, health } from "@/lib/api";
+import { MicRecorder, RecorderError } from "@/lib/recorder";
+import { loadTurns, newTurnId, saveTurns, type SessionTurn } from "@/lib/session";
+import {
+  canSpeak,
+  preloadVoices,
+  setSarvamTts,
+  setSpeakListener,
+  speakNext,
+  stopSpeaking,
+  takeSpeakable,
+  whenSpeechEnds,
+} from "@/lib/speak";
+import { createVad } from "@/lib/vad";
+import {
+  type AskResponse,
+  type HealthResponse,
+  type HistoryTurn,
+  LANGUAGES,
+  type Language,
+  type LiveStage,
+  type StreamEvent,
+} from "@/lib/types";
 
-type Phase = "idle" | "recording" | "busy";
+const MAX_SECONDS = 30;
 
 export default function Page() {
   const [service, setService] = useState<HealthResponse | null>(null);
   const [serviceError, setServiceError] = useState<string | null>(null);
   const [language, setLanguage] = useState<Language>("en");
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [busyMode, setBusyMode] = useState<"audio" | "text">("text");
+  const [orb, setOrb] = useState<OrbState>("idle");
   const [level, setLevel] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [response, setResponse] = useState<AskResponse | null>(null);
-  const [typed, setTyped] = useState("");
   const [muted, setMuted] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [turns, setTurns] = useState<SessionTurn[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [draftYou, setDraftYou] = useState("");
+  const [draftAgent, setDraftAgent] = useState("");
+  const [draftRefused, setDraftRefused] = useState(false);
+  const [stages, setStages] = useState<LiveStage[]>([]);
+  const [streaming, setStreaming] = useState(false);
+  const [audioTurn, setAudioTurn] = useState(false);
+  const [finalResponse, setFinalResponse] = useState<AskResponse | null>(null);
+  const [voicesReady, setVoicesReady] = useState(false);
+  const [waitHint, setWaitHint] = useState<string | null>(null);
 
   const recorder = useRef<MicRecorder | null>(null);
-  const meter = useRef<ReturnType<typeof createLevelMeter> | null>(null);
-  const spoken = LANGUAGES.find((entry) => entry.code === language);
+  const vad = useRef<ReturnType<typeof createVad> | null>(null);
+  const heardSpeech = useRef(false);
+  const sending = useRef(false);
+  const autoListen = useRef(false);
+  const cycle = useRef(0);
+  const abort = useRef<AbortController | null>(null);
+  const speakBuf = useRef("");
+  const mutedRef = useRef(muted);
+  const languageRef = useRef(language);
+  const orbRef = useRef(orb);
+  mutedRef.current = muted;
+  languageRef.current = language;
+  orbRef.current = orb;
 
   useEffect(() => {
+    preloadVoices();
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    const mark = () => setVoicesReady(window.speechSynthesis.getVoices().length > 0);
+    mark();
+    window.speechSynthesis.addEventListener("voiceschanged", mark);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", mark);
+  }, []);
+
+  useEffect(() => {
+    setTurns(loadTurns());
     health()
-      .then(setService)
+      .then((status) => {
+        setSarvamTts(Boolean(status.has_tts));
+        setService(status);
+      })
       .catch((err: unknown) =>
         setServiceError(
           err instanceof ApiError
@@ -42,214 +96,451 @@ export default function Page() {
       );
   }, []);
 
-  const stopMeter = useCallback(() => {
-    meter.current?.stop();
-    meter.current = null;
+  useEffect(() => {
+    saveTurns(turns);
+  }, [turns]);
+
+  useEffect(() => {
+    setSpeakListener(() => setOrb("speaking"));
+    return () => setSpeakListener(null);
+  }, []);
+
+  const historyForRequest = useCallback((): HistoryTurn[] => {
+    return turns.slice(-3).flatMap((turn) => [
+      { role: "user" as const, text: turn.query },
+      { role: "assistant" as const, text: turn.answer },
+    ]);
+  }, [turns]);
+
+  const stopCapture = useCallback(() => {
+    vad.current?.stop();
+    vad.current = null;
     setLevel(0);
   }, []);
 
-  const submitAudio = useCallback(
-    async (wav: Blob) => {
-      setBusyMode("audio");
-      setPhase("busy");
+  const finishSpeakThenListen = useCallback(async (id: number) => {
+    await whenSpeechEnds();
+    if (id !== cycle.current) return;
+    setOrb("idle");
+    if (autoListen.current && service?.ready) {
+      window.setTimeout(() => {
+        if (id === cycle.current && orbRef.current === "idle") {
+          void startListeningRef.current();
+        }
+      }, 200);
+    }
+  }, [service?.ready]);
+
+  const consumeStream = useCallback(
+    async (events: AsyncGenerator<StreamEvent>, queryHint: string, fromAudio: boolean) => {
+      const id = cycle.current;
+      setStreaming(true);
+      setAudioTurn(fromAudio);
+      setOrb("thinking");
+      if (fromAudio && !draftYou) setWaitHint("Heard you. Transcribing…");
+      setStages([]);
+      setDraftAgent("");
+      setDraftRefused(false);
+      setFinalResponse(null);
+      setSelectedId(null);
+      speakBuf.current = "";
+      if (!fromAudio) setDraftYou(queryHint);
+
+      const flushSpeak = () => {
+        const rest = speakBuf.current.trim();
+        speakBuf.current = "";
+        if (rest && !mutedRef.current) speakNext(rest, languageRef.current);
+      };
+
+      let last: AskResponse | null = null;
       try {
-        setResponse(await askAudio(wav, language));
+        for await (const event of events) {
+          if (id !== cycle.current) return;
+          if (event.type === "transcript") {
+            setDraftYou(event.text);
+            setWaitHint(null);
+          } else if (event.type === "stage") {
+            setStages((current) => [...current, event]);
+          } else if (event.type === "token") {
+            setDraftAgent((current) => current + event.text);
+            if (!mutedRef.current) {
+              speakBuf.current += event.text;
+              const { chunks, rest } = takeSpeakable(speakBuf.current);
+              speakBuf.current = rest;
+              for (const chunk of chunks) speakNext(chunk, languageRef.current);
+            }
+          } else if (event.type === "final") {
+            last = event.response;
+          }
+        }
+      } finally {
+        setStreaming(false);
+      }
+
+      if (id !== cycle.current) return;
+      if (!last) return;
+
+      if (last.refused) {
+        stopSpeaking();
+        speakBuf.current = "";
+        setDraftAgent(last.answer);
+        setDraftRefused(true);
+      } else {
+        setDraftAgent(last.answer);
+        flushSpeak();
+      }
+      setFinalResponse(last);
+      const turn: SessionTurn = {
+        id: newTurnId(),
+        query: last.transcript || queryHint,
+        transcript: last.transcript,
+        answer: last.answer,
+        lang: last.answer_language,
+        trace: last.trace,
+        refused: last.refused,
+        citations: last.citations,
+      };
+      setTurns((current) => [...current, turn]);
+      setSelectedId(turn.id);
+
+      const willSpeak = !last.refused && !mutedRef.current && canSpeak(last.answer_language);
+      if (willSpeak) setOrb("speaking");
+      await finishSpeakThenListen(id);
+    },
+    [finishSpeakThenListen],
+  );
+
+  const startListeningRef = useRef<() => Promise<void>>(async () => {});
+
+  const sendAudio = useCallback(
+    async (wav: Blob) => {
+      cycle.current += 1;
+      abort.current?.abort();
+      const controller = new AbortController();
+      abort.current = controller;
+      try {
+        await consumeStream(
+          askAudioStream(wav, languageRef.current, historyForRequest(), controller.signal),
+          draftYou || "…",
+          true,
+        );
       } catch (err) {
+        if ((err as Error).name === "AbortError") return;
         setError(
           err instanceof ApiError
             ? `${err.message} (HTTP ${err.status})`
             : "The request failed. Check that the API is still running.",
         );
-      } finally {
-        setPhase("idle");
+        setOrb("idle");
+        setStreaming(false);
       }
     },
-    [language],
+    [consumeStream, draftYou, historyForRequest],
   );
 
-  const stopRecording = useCallback(async () => {
+  const stopAndSend = useCallback(async () => {
+    if (sending.current) return;
     const active = recorder.current;
     if (!active?.active) return;
-    stopMeter();
-    setBusyMode("audio");
-    setPhase("busy");
+    sending.current = true;
+    stopCapture();
     try {
-      await submitAudio(await active.stop());
+      if (!heardSpeech.current) {
+        active.cancel();
+        recorder.current = null;
+        setOrb("idle");
+        return;
+      }
+      setOrb("thinking");
+      setWaitHint("Heard you. Transcribing…");
+      const wav = await active.stop();
+      recorder.current = null;
+      await sendAudio(wav);
     } catch (err) {
       setError(err instanceof RecorderError ? err.message : "Recording failed.");
-      setPhase("idle");
+      setOrb("idle");
+    } finally {
+      sending.current = false;
     }
-  }, [stopMeter, submitAudio]);
+  }, [sendAudio, stopCapture]);
 
-  const seconds = useRecordingClock(phase === "recording", () => void stopRecording());
-
-  const startRecording = useCallback(async () => {
+  const startListening = useCallback(async () => {
+    if (!service?.ready) return;
     setError(null);
-    setResponse(null);
     stopSpeaking();
+    heardSpeech.current = false;
+    sending.current = false;
+    autoListen.current = true;
     const mic = new MicRecorder();
     recorder.current = mic;
     try {
       await mic.start();
-      setPhase("recording");
+      setOrb("listening");
+      setDraftYou("");
+      setDraftAgent("");
+      setDraftRefused(false);
+      setWaitHint(null);
+      setFinalResponse(null);
+      setStages([]);
+      setSelectedId(null);
       if (mic.mediaStream) {
-        meter.current = createLevelMeter(mic.mediaStream);
-        const tick = () => {
-          if (!meter.current) return;
-          setLevel(meter.current.read());
-          requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
+        vad.current = createVad(mic.mediaStream, {
+          onLevel: setLevel,
+          onSpeechStart: () => {
+            heardSpeech.current = true;
+          },
+          onSpeechEnd: () => {
+            void stopAndSend();
+          },
+        });
       }
     } catch (err) {
       setError(err instanceof RecorderError ? err.message : "Could not start recording.");
-      setPhase("idle");
+      setOrb("idle");
     }
-  }, []);
+  }, [service?.ready, stopAndSend]);
 
-  const submitQuery = useCallback(async (query: string, lang: Language) => {
-    const text = query.trim();
-    if (!text) return;
-    setError(null);
-    setResponse(null);
+  startListeningRef.current = startListening;
+
+  const seconds = useRecordingClock(orb === "listening", () => void stopAndSend());
+
+  useEffect(() => {
+    if (orb === "listening" && seconds >= MAX_SECONDS) void stopAndSend();
+  }, [orb, seconds, stopAndSend]);
+
+  const toggleOrb = useCallback(() => {
+    if (orb === "listening") {
+      void stopAndSend();
+      return;
+    }
+    if (orb === "idle") void startListening();
+  }, [orb, startListening, stopAndSend]);
+
+  const submitText = useCallback(
+    async (query: string, lang: Language) => {
+      const text = query.trim();
+      if (!text) return;
+      cycle.current += 1;
+      abort.current?.abort();
+      const controller = new AbortController();
+      abort.current = controller;
+      setLanguage(lang);
+      languageRef.current = lang;
+      setTyped(text);
+      setError(null);
+      stopSpeaking();
+      autoListen.current = true;
+      const events = askStream(text, lang, historyForRequest(), controller.signal);
+      try {
+        await consumeStream(events, text, false);
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+        setError(
+          err instanceof ApiError
+            ? `${err.message} (HTTP ${err.status})`
+            : "The request failed. Check that the API is still running.",
+        );
+        setOrb("idle");
+        setStreaming(false);
+      }
+    },
+    [consumeStream, historyForRequest],
+  );
+
+  const newChat = useCallback(() => {
+    cycle.current += 1;
+    abort.current?.abort();
+    autoListen.current = false;
+    stopCapture();
+    recorder.current?.cancel();
+    recorder.current = null;
     stopSpeaking();
-    setLanguage(lang);
-    setTyped(text);
-    setBusyMode("text");
-    setPhase("busy");
-    try {
-      setResponse(await askText(text, lang));
-    } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? `${err.message} (HTTP ${err.status})`
-          : "The request failed. Check that the API is still running.",
-      );
-    } finally {
-      setPhase("idle");
-    }
-  }, []);
+    setTurns([]);
+    setSelectedId(null);
+    setDraftYou("");
+    setDraftAgent("");
+    setDraftRefused(false);
+    setWaitHint(null);
+    setStages([]);
+    setFinalResponse(null);
+    setError(null);
+    setTyped("");
+    setOrb("idle");
+    setStreaming(false);
+  }, [stopCapture]);
 
-  const submitTyped = useCallback(() => {
-    void submitQuery(typed, language);
-  }, [typed, language, submitQuery]);
+  const live = orb !== "idle" || streaming;
+  const inFlight = streaming || Boolean(waitHint);
+  const selected = turns.find((turn) => turn.id === selectedId) ?? null;
+  const refused = live ? draftRefused : Boolean(selected?.refused ?? draftRefused);
+  const shownTrace = live ? finalResponse?.trace : (selected?.trace ?? finalResponse?.trace);
+  const shownResponse: AskResponse | null = live
+    ? finalResponse
+    : selected && finalResponse && selected.id === selectedId
+      ? finalResponse
+      : selected
+        ? {
+            answer: selected.answer,
+            refused: selected.refused,
+            refusal_reason: null,
+            citations: selected.citations,
+            confidence: 0,
+            transcript: selected.transcript,
+            answer_language: selected.lang,
+            groundedness: null,
+            trace: selected.trace ?? {
+              request_id: selected.id,
+              spans: [],
+              degradations: [],
+              tool_calls: [],
+              retrieval_ms: 0,
+              llm_ttft_ms: null,
+              total_ms: 0,
+              cache_hit: false,
+            },
+          }
+        : finalResponse;
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-12 sm:py-16">
-      <header className="mb-10">
-        <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-          Ask out loud
-        </h1>
-        <p className="mt-2.5 max-w-2xl leading-relaxed text-white/50">
-          Speak a question in any of five languages. It is transcribed and translated in one
-          call, answered only from passages retrieved out of MS MARCO-XI, and refused outright
-          when the corpus cannot support an answer.
-        </p>
-      </header>
-
-      <section className="mb-8">
-        <label className="mb-2 block text-[11px] font-semibold tracking-wider text-white/35 uppercase">
-          I will speak
-        </label>
-        <div className="flex flex-wrap gap-2">
-          {LANGUAGES.map((entry) => (
-            <button
-              key={entry.code}
-              type="button"
-              onClick={() => setLanguage(entry.code)}
-              className={`rounded-full border px-3.5 py-1.5 text-sm transition ${
-                language === entry.code
-                  ? "border-accent bg-accent/15 text-white"
-                  : "border-edge text-white/55 hover:border-white/25 hover:text-white/80"
-              }`}
-            >
-              <span lang={entry.code}>{entry.native}</span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="mb-8 flex flex-col items-center gap-6 rounded-2xl border border-edge bg-surface/40 py-10">
-        <MicButton
-          state={phase}
-          seconds={seconds}
-          level={level}
-          onStart={() => void startRecording()}
-          onStop={() => void stopRecording()}
-          disabled={!service?.ready}
+    <div className="flex h-dvh overflow-hidden">
+      <div className="hidden lg:block">
+        <SidebarHistory
+          turns={turns}
+          selectedId={selectedId}
+          onSelect={(id) => {
+            if (live) return;
+            setSelectedId(id);
+          }}
+          onNewChat={newChat}
         />
-        {phase === "recording" && spoken && (
-          <p className="text-sm text-white/55">
-            Answering in <span lang={spoken.code}>{spoken.native}</span>
-          </p>
+      </div>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center justify-between border-b border-edge px-5 py-3 lg:hidden">
+          <p className="text-sm text-white/70">Voice agent</p>
+          <button
+            type="button"
+            onClick={newChat}
+            className="rounded-full border border-edge px-2.5 py-1 text-[11px] text-white/60"
+          >
+            New chat
+          </button>
+        </header>
+
+        <TranscriptPane
+          turns={turns}
+          liveYou={inFlight ? draftYou : ""}
+          liveAgent={inFlight ? draftAgent : ""}
+          liveStatus={
+            inFlight && !draftAgent
+              ? waitHint || (draftYou ? "Looking that up…" : null)
+              : inFlight && draftAgent && orb === "thinking"
+                ? "Voice is catching up…"
+                : null
+          }
+          language={selected?.lang ?? language}
+          refused={refused}
+          live={inFlight}
+        />
+        {shownResponse && !streaming && (
+          <div className="shrink-0 px-6 pb-3">
+            <CitationStrip response={shownResponse} />
+          </div>
         )}
 
-        <div className="w-full max-w-md px-6">
-          <div className="mb-3 flex items-center gap-3">
-            <span className="h-px flex-1 bg-edge" />
-            <span className="text-[11px] tracking-wider text-white/25 uppercase">or type</span>
-            <span className="h-px flex-1 bg-edge" />
+        <div className="flex min-h-[220px] flex-[2] flex-col items-center justify-center gap-5 border-t border-edge bg-surface/30 px-5 py-5">
+          <AgentOrb
+            state={orb}
+            level={level}
+            seconds={seconds}
+            disabled={!service?.ready}
+            onToggle={toggleOrb}
+          />
+
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {LANGUAGES.map((entry) => (
+              <button
+                key={entry.code}
+                type="button"
+                onClick={() => setLanguage(entry.code)}
+                className={`rounded-full border px-3 py-1 text-xs transition ${
+                  language === entry.code
+                    ? "border-accent bg-accent/15 text-white"
+                    : "border-edge text-white/50 hover:border-white/25 hover:text-white/80"
+                }`}
+              >
+                <span lang={entry.code}>{entry.native}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                if (!muted) stopSpeaking();
+                setMuted((value) => !value);
+              }}
+              className="rounded-full border border-edge px-3 py-1 text-xs text-white/50
+                hover:border-white/25 hover:text-white/80"
+            >
+              {muted ? "muted" : "voice on"}
+            </button>
           </div>
-          <div className="flex gap-2">
+          {voicesReady && !muted && !canSpeak(language) && (
+            <p className="max-w-sm text-center text-[11px] text-white/40">
+              This browser has no {LANGUAGES.find((entry) => entry.code === language)?.label ?? language}{" "}
+              voice. The answer stays on screen.
+            </p>
+          )}
+
+          <div className="flex w-full max-w-lg gap-2">
             <input
               value={typed}
               onChange={(event) => setTyped(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter") submitTyped();
+                if (event.key === "Enter") void submitText(typed, language);
               }}
-              placeholder="what is a corporation"
-              disabled={phase !== "idle" || !service?.ready}
+              placeholder="or type a follow-up"
+              disabled={orb !== "idle" || !service?.ready}
               className="min-w-0 flex-1 rounded-xl border border-edge bg-raised/60 px-3.5 py-2.5 text-sm
                 text-white/85 placeholder:text-white/25 focus:border-accent/60 focus:outline-none
                 disabled:opacity-40"
             />
             <button
               type="button"
-              onClick={submitTyped}
-              disabled={phase !== "idle" || !typed.trim() || !service?.ready}
+              onClick={() => void submitText(typed, language)}
+              disabled={orb !== "idle" || !typed.trim() || !service?.ready}
               className="shrink-0 rounded-xl bg-white/10 px-4 py-2.5 text-sm font-medium text-white/85
                 transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-30"
             >
               Ask
             </button>
           </div>
-        </div>
 
-        {phase === "idle" && !response && !error && (
-          <SampleQuestions
-            disabled={!service?.ready}
-            onPick={(text, lang) => void submitQuery(text, lang)}
-          />
+          {orb === "idle" && turns.length === 0 && !error && (
+            <SampleQuestions
+              disabled={!service?.ready}
+              onPick={(text, lang) => void submitText(text, lang)}
+            />
+          )}
+
+          {error && <p className="max-w-md text-center text-sm text-warm">{error}</p>}
+        </div>
+      </div>
+
+      <aside className="hidden h-full w-[280px] shrink-0 flex-col overflow-y-auto border-l border-edge bg-surface/40 p-3 lg:flex">
+        <LiveStages stages={stages} pending={streaming} audio={audioTurn} />
+        {shownTrace && (
+          <div className="mt-3">
+            <TracePanel
+              trace={shownTrace}
+              budgetMs={service?.retrieval_budget_ms ?? 200}
+            />
+          </div>
         )}
-      </section>
-
-      {error && (
-        <div className="mb-8 rounded-2xl border border-warm/30 bg-warm/5 p-4">
-          <p className="text-sm text-warm">{error}</p>
+        <div className="mt-auto pt-6 text-[11px] leading-relaxed text-white/30">
+          <ServiceStatus service={service} error={serviceError} />
         </div>
-      )}
-
-      {phase === "busy" && !response && <ThinkingStages mode={busyMode} />}
-
-      {response && (
-        <div className="space-y-6">
-          <AnswerCard response={response} muted={muted} onMutedChange={setMuted} />
-          <TracePanel
-            trace={response.trace}
-            budgetMs={service?.retrieval_budget_ms ?? 200}
-          />
-        </div>
-      )}
-
-      <footer className="mt-14 border-t border-edge/60 pt-6 text-xs leading-relaxed text-white/25">
-        <ServiceStatus service={service} error={serviceError} />
-        <p className="mt-3">
-          Built on MS MARCO-XI, which is released for non-commercial research use. Retrieval
-          runs under a hard 200ms deadline and sheds optional stages rather than overrunning
-          it; when that happens, the trace says so.
-        </p>
-      </footer>
-    </main>
+      </aside>
+    </div>
   );
 }
 
@@ -268,24 +559,14 @@ function ServiceStatus({
       </p>
     );
   }
-  if (!service) {
-    return <p>checking the service…</p>;
-  }
-
+  if (!service) return <p>checking the service…</p>;
   return (
-    <p className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 text-white/35">
+    <p className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="inline-flex items-center gap-1.5">
-        <span
-          className={`h-1.5 w-1.5 rounded-full ${service.ready ? "bg-mint" : "bg-warm"}`}
-        />
+        <span className={`h-1.5 w-1.5 rounded-full ${service.ready ? "bg-mint" : "bg-warm"}`} />
         {service.ready ? "ready" : "loading"}
       </span>
-      {service.chunks !== null && (
-        <span>{service.chunks.toLocaleString()} chunks</span>
-      )}
-      {service.docs !== null && <span>{service.docs.toLocaleString()} docs</span>}
-      {service.strategy && <span>{service.strategy}</span>}
-      {service.has_sparse && <span>hybrid</span>}
+      {service.chunks !== null && <span>{service.chunks.toLocaleString()} chunks</span>}
     </p>
   );
 }
