@@ -1,5 +1,7 @@
 import type { Citation, Language, Trace } from "./types";
 
+export type TurnKind = "qa" | "greeting" | "farewell";
+
 export type SessionTurn = {
   id: string;
   query: string;
@@ -9,6 +11,7 @@ export type SessionTurn = {
   trace: Trace | null;
   refused: boolean;
   citations: Citation[];
+  kind?: TurnKind;
 };
 
 const KEY = "ragoa.session.turns";
@@ -23,6 +26,7 @@ export function loadTurns(): SessionTurn[] {
     return parsed.map((turn) => ({
       ...turn,
       citations: turn.citations ?? [],
+      kind: turn.kind ?? "qa",
     }));
   } catch {
     return [];

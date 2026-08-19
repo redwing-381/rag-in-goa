@@ -11,7 +11,8 @@ import { CitationStrip, TranscriptPane } from "@/components/TranscriptPane";
 import { TracePanel } from "@/components/TracePanel";
 import { ApiError, askAudioStream, askStream, health } from "@/lib/api";
 import { MicRecorder, RecorderError } from "@/lib/recorder";
-import { loadTurns, newTurnId, saveTurns, type SessionTurn } from "@/lib/session";
+import { CLOSING, OPENING, isEndCommand } from "@/lib/greetings";
+import { loadTurns, newTurnId, saveTurns, type SessionTurn, type TurnKind } from "@/lib/session";
 import {
   canSpeak,
   preloadVoices,
@@ -22,7 +23,7 @@ import {
   takeSpeakable,
   whenSpeechEnds,
 } from "@/lib/speak";
-import { createVad } from "@/lib/vad";
+import { END_SILENCE_MS, createVad } from "@/lib/vad";
 import {
   type AskResponse,
   type HealthResponse,
@@ -55,12 +56,15 @@ export default function Page() {
   const [finalResponse, setFinalResponse] = useState<AskResponse | null>(null);
   const [voicesReady, setVoicesReady] = useState(false);
   const [waitHint, setWaitHint] = useState<string | null>(null);
+  const [conversing, setConversing] = useState(false);
 
   const recorder = useRef<MicRecorder | null>(null);
   const vad = useRef<ReturnType<typeof createVad> | null>(null);
   const heardSpeech = useRef(false);
   const sending = useRef(false);
   const autoListen = useRef(false);
+  const greeted = useRef(false);
+  const ending = useRef(false);
   const cycle = useRef(0);
   const abort = useRef<AbortController | null>(null);
   const speakBuf = useRef("");
@@ -106,10 +110,13 @@ export default function Page() {
   }, []);
 
   const historyForRequest = useCallback((): HistoryTurn[] => {
-    return turns.slice(-3).flatMap((turn) => [
-      { role: "user" as const, text: turn.query },
-      { role: "assistant" as const, text: turn.answer },
-    ]);
+    return turns
+      .filter((turn) => (turn.kind ?? "qa") === "qa" && turn.query)
+      .slice(-3)
+      .flatMap((turn) => [
+        { role: "user" as const, text: turn.query },
+        { role: "assistant" as const, text: turn.answer },
+      ]);
   }, [turns]);
 
   const stopCapture = useCallback(() => {
@@ -117,6 +124,85 @@ export default function Page() {
     vad.current = null;
     setLevel(0);
   }, []);
+
+  const haltCapture = useCallback(() => {
+    abort.current?.abort();
+    abort.current = null;
+    autoListen.current = false;
+    sending.current = false;
+    heardSpeech.current = false;
+    stopCapture();
+    recorder.current?.cancel();
+    recorder.current = null;
+    setStreaming(false);
+    setWaitHint(null);
+    setAudioTurn(false);
+  }, [stopCapture]);
+
+  const pushUserLine = useCallback((text: string) => {
+    const turn: SessionTurn = {
+      id: newTurnId(),
+      query: text,
+      transcript: text,
+      answer: "",
+      lang: languageRef.current,
+      trace: null,
+      refused: false,
+      citations: [],
+      kind: "qa",
+    };
+    setTurns((current) => [...current, turn]);
+    setSelectedId(turn.id);
+    setDraftYou(text);
+  }, []);
+
+  const pushAgentLine = useCallback((text: string, kind: TurnKind) => {
+    const turn: SessionTurn = {
+      id: newTurnId(),
+      query: "",
+      transcript: null,
+      answer: text,
+      lang: languageRef.current,
+      trace: null,
+      refused: false,
+      citations: [],
+      kind,
+    };
+    setTurns((current) => [...current, turn]);
+    setSelectedId(turn.id);
+  }, []);
+
+  const deliverLine = useCallback(
+    async (text: string, kind: TurnKind) => {
+      pushAgentLine(text, kind);
+      if (mutedRef.current) return;
+      setOrb("speaking");
+      speakNext(text, languageRef.current);
+      await whenSpeechEnds();
+    },
+    [pushAgentLine],
+  );
+
+  const endConversation = useCallback(async () => {
+    if (ending.current) return;
+    ending.current = true;
+    cycle.current += 1;
+    const id = cycle.current;
+    haltCapture();
+    stopSpeaking();
+
+    if (greeted.current) {
+      await deliverLine(CLOSING[languageRef.current], "farewell");
+    }
+    if (id !== cycle.current) {
+      ending.current = false;
+      return;
+    }
+    greeted.current = false;
+    setConversing(false);
+    setOrb("idle");
+    ending.current = false;
+  }, [deliverLine, haltCapture]);
 
   const finishSpeakThenListen = useCallback(async (id: number) => {
     await whenSpeechEnds();
@@ -159,6 +245,12 @@ export default function Page() {
           if (event.type === "transcript") {
             setDraftYou(event.text);
             setWaitHint(null);
+            if (isEndCommand(event.text)) {
+              pushUserLine(event.text);
+              abort.current?.abort();
+              await endConversation();
+              return;
+            }
           } else if (event.type === "stage") {
             setStages((current) => [...current, event]);
           } else if (event.type === "token") {
@@ -207,7 +299,7 @@ export default function Page() {
       if (willSpeak) setOrb("speaking");
       await finishSpeakThenListen(id);
     },
-    [finishSpeakThenListen],
+    [endConversation, finishSpeakThenListen, pushUserLine],
   );
 
   const startListeningRef = useRef<() => Promise<void>>(async () => {});
@@ -265,12 +357,22 @@ export default function Page() {
   }, [sendAudio, stopCapture]);
 
   const startListening = useCallback(async () => {
-    if (!service?.ready) return;
+    if (!service?.ready || ending.current) return;
     setError(null);
-    stopSpeaking();
+    const id = cycle.current;
+    if (!greeted.current) {
+      greeted.current = true;
+      autoListen.current = true;
+      setConversing(true);
+      await deliverLine(OPENING[languageRef.current], "greeting");
+      if (id !== cycle.current || ending.current) return;
+    } else {
+      stopSpeaking();
+    }
     heardSpeech.current = false;
     sending.current = false;
     autoListen.current = true;
+    setConversing(true);
     const mic = new MicRecorder();
     recorder.current = mic;
     try {
@@ -285,7 +387,7 @@ export default function Page() {
       setSelectedId(null);
       if (mic.mediaStream) {
         vad.current = createVad(mic.mediaStream, {
-          silenceMs: 2000,
+          silenceMs: END_SILENCE_MS,
           minSpeechMs: 700,
           onLevel: setLevel,
           onSpeechStart: () => {
@@ -300,7 +402,7 @@ export default function Page() {
       setError(err instanceof RecorderError ? err.message : "Could not start recording.");
       setOrb("idle");
     }
-  }, [service?.ready, stopAndSend]);
+  }, [deliverLine, service?.ready, stopAndSend]);
 
   startListeningRef.current = startListening;
 
@@ -324,6 +426,18 @@ export default function Page() {
       setError(null);
       stopSpeaking();
       autoListen.current = true;
+      setConversing(true);
+      if (isEndCommand(text)) {
+        greeted.current = true;
+        pushUserLine(text);
+        await endConversation();
+        return;
+      }
+      if (!greeted.current) {
+        greeted.current = true;
+        await deliverLine(OPENING[lang], "greeting");
+        if (ending.current) return;
+      }
       const events = askStream(text, lang, historyForRequest(), controller.signal);
       try {
         await consumeStream(events, text, false);
@@ -338,7 +452,7 @@ export default function Page() {
         setStreaming(false);
       }
     },
-    [consumeStream, historyForRequest],
+    [consumeStream, deliverLine, endConversation, historyForRequest, pushUserLine],
   );
 
   const stopVoice = useCallback(() => {
@@ -362,26 +476,24 @@ export default function Page() {
   }, [stopCapture]);
 
   const newChat = useCallback(() => {
+    ending.current = true;
     cycle.current += 1;
-    abort.current?.abort();
-    autoListen.current = false;
-    stopCapture();
-    recorder.current?.cancel();
-    recorder.current = null;
+    haltCapture();
     stopSpeaking();
+    greeted.current = false;
+    ending.current = false;
+    setConversing(false);
+    setOrb("idle");
     setTurns([]);
     setSelectedId(null);
     setDraftYou("");
     setDraftAgent("");
     setDraftRefused(false);
-    setWaitHint(null);
     setStages([]);
     setFinalResponse(null);
     setError(null);
     setTyped("");
-    setOrb("idle");
-    setStreaming(false);
-  }, [stopCapture]);
+  }, [haltCapture]);
 
   const live = orb !== "idle" || streaming;
   const inFlight = streaming || Boolean(waitHint);
@@ -470,7 +582,7 @@ export default function Page() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="hidden lg:block">
           <SidebarHistory
-            turns={turns}
+            turns={turns.filter((turn) => (turn.kind ?? "qa") === "qa")}
             selectedId={selectedId}
             onSelect={(id) => {
               if (live) return;

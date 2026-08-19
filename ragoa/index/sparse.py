@@ -14,14 +14,11 @@ and `load(mmap=True)` keeps the serving footprint small.
 
 from __future__ import annotations
 
-import resource
 from pathlib import Path
 
 import numpy as np
 
-
-def _peak_rss_mb() -> float:
-    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6
+from ragoa.telemetry.rss import peak_rss_mb as _peak_rss_mb
 
 
 class SparseIndex:

@@ -1,10 +1,12 @@
 /**
  * Voice-activity detection on the same AnalyserNode style as the level meter.
  *
- * Speech starts when RMS stays above a threshold; it ends after 2 s of
- * quiet so a short breath does not cut the question. The recorder still
- * owns capture and the 30 s hard cap.
+ * Speech starts when RMS stays above a threshold; it ends after a stretch of
+ * quiet (2 s by default) so a brief pause mid-sentence does not cut the turn.
+ * The recorder still owns capture and the 30 s hard cap.
  */
+
+export const END_SILENCE_MS = 2000;
 
 export type VadHandle = {
   read: () => number;
@@ -22,8 +24,8 @@ export function createVad(
     onLevel?: (level: number) => void;
   } = {},
 ): VadHandle {
-  const threshold = options.threshold ?? 0.06;
-  const silenceMs = options.silenceMs ?? 2000;
+  const threshold = options.threshold ?? 0.045;
+  const silenceMs = options.silenceMs ?? END_SILENCE_MS;
   const minSpeechMs = options.minSpeechMs ?? 700;
 
   const context = new AudioContext();

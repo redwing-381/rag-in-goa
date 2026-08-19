@@ -38,12 +38,19 @@ def load_encoder(kind: str, dim: int, cfg: Settings, device: str | None = None):
         return HashEncoder(dim=dim, query_prefix=cfg.query_prefix)
 
     if kind == "onnx":
-        from ragoa.embed.encoder import OnnxEncoder
+        onnx_path = cfg.onnx_model("embedder")
+        tokenizer_dir = cfg.onnx_embedder_dir
+        if onnx_path.exists() and tokenizer_dir.exists():
+            from ragoa.embed.encoder import OnnxEncoder
 
-        return OnnxEncoder(
-            onnx_path=str(cfg.onnx_model("embedder")),
-            tokenizer_dir=str(cfg.onnx_embedder_dir),
-            dim=dim, query_prefix=cfg.query_prefix, threads=cfg.onnx_threads,
+            return OnnxEncoder(
+                onnx_path=str(onnx_path),
+                tokenizer_dir=str(tokenizer_dir),
+                dim=dim, query_prefix=cfg.query_prefix, threads=cfg.onnx_threads,
+            )
+        print(
+            f"onnx encoder missing at {onnx_path}; falling back to sentence-transformers",
+            flush=True,
         )
 
     from ragoa.embed.encoder import SentenceTransformerEncoder
