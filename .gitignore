@@ -34,3 +34,13 @@ out/
 
 # OS / editor
 .DS_Store
+.cursor/
+
+# Accidental docker / npm scraps at repo root
+/=
+/[
+/Verified
+/extracting
+/resolve
+/transferring
+/sha256:*
