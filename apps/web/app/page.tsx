@@ -514,10 +514,18 @@ export default function Page() {
             onListen={playAnswer}
             emptyExtra={
               orb === "idle" && turns.length === 0 && !error ? (
-                <SampleQuestions
-                  disabled={!service?.ready}
-                  onPick={(text, lang) => void submitText(text, lang)}
-                />
+                <>
+                  {(!service?.ready || serviceError) && (
+                    <p className="mt-5 max-w-md text-sm leading-relaxed text-accent">
+                      If this page is still checking the API, or nothing works,
+                      refresh the browser. The service may still be waking up.
+                    </p>
+                  )}
+                  <SampleQuestions
+                    disabled={!service?.ready}
+                    onPick={(text, lang) => void submitText(text, lang)}
+                  />
+                </>
               ) : undefined
             }
           />
@@ -596,19 +604,30 @@ function ServiceStatus({
 }) {
   if (error) {
     return (
-      <p className="inline-flex items-center gap-2 font-mono text-[11px] text-accent">
-        <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-        {error}
+      <p className="inline-flex max-w-xs items-baseline gap-2 font-mono text-[11px] leading-snug text-accent">
+        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+        Cannot reach the API. Refresh the page.
       </p>
     );
   }
   if (!service) {
-    return <p className="font-mono text-[11px] text-muted">checking the service…</p>;
+    return (
+      <p className="font-mono text-[11px] text-muted">
+        checking the service… refresh if this stays
+      </p>
+    );
+  }
+  if (!service.ready) {
+    return (
+      <p className="font-mono text-[11px] text-muted">
+        loading… refresh if it does not become ready
+      </p>
+    );
   }
   return (
     <p className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted">
-      <span className={`h-1.5 w-1.5 rounded-full ${service.ready ? "bg-mint" : "bg-accent"}`} />
-      {service.ready ? "ready" : "loading"}
+      <span className="h-1.5 w-1.5 rounded-full bg-mint" />
+      ready
     </p>
   );
 }
