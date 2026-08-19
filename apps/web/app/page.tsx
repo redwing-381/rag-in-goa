@@ -324,7 +324,7 @@ export default function Page() {
       abort.current = controller;
       setLanguage(lang);
       languageRef.current = lang;
-      setTyped(text);
+      setTyped("");
       setError(null);
       stopSpeaking();
       if (isEndCommand(text)) {
