@@ -11,8 +11,8 @@ function copy(
 ): { title: string; detail: string } {
   if (state === "listening") {
     return {
-      title: `${seconds.toFixed(1)}s · listening`,
-      detail: "Pause two seconds to send. Tap the bars to send now.",
+      title: `${seconds.toFixed(1)}s · tap to stop`,
+      detail: "Or pause two seconds to send.",
     };
   }
   if (state === "thinking") {
@@ -23,8 +23,8 @@ function copy(
   }
   if (state === "speaking") {
     return {
-      title: "Speaking the answer",
-      detail: "Stop cuts the voice. End voice chat leaves the loop.",
+      title: "Playing the answer",
+      detail: "Stop cuts the voice. Tap the bars when you want to ask again.",
     };
   }
   if (state === "error") {
@@ -35,13 +35,13 @@ function copy(
   }
   if (recover) {
     return {
-      title: "Tap and ask again",
-      detail: "Speak a complete question. Pause two seconds when you finish.",
+      title: "Tap to start",
+      detail: "Tap to stop when you finish, or pause two seconds to send.",
     };
   }
   return {
-    title: "Tap to talk",
-    detail: "Speak a question. Pause two seconds when you are done.",
+    title: "Tap to start",
+    detail: "Tap to stop when you finish, or pause two seconds to send.",
   };
 }
 
@@ -90,7 +90,7 @@ export function AgentOrb({
           onStart={onStart}
           onStop={onStop}
           disabled={disabled || thinking || speaking}
-          aria-label={listening ? "Send now" : "Start listening"}
+          aria-label={listening ? "Tap to stop" : "Tap to start"}
         />
       </div>
       <p

@@ -3,7 +3,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
 import type { SessionTurn } from "@/lib/session";
-import type { AskResponse } from "@/lib/types";
+import type { AskResponse, Language } from "@/lib/types";
 
 export function TranscriptPane({
   turns,
@@ -14,6 +14,8 @@ export function TranscriptPane({
   refused,
   live,
   emptyExtra,
+  playingId,
+  onListen,
 }: {
   turns: SessionTurn[];
   liveYou: string;
@@ -23,6 +25,8 @@ export function TranscriptPane({
   refused: boolean;
   live: boolean;
   emptyExtra?: ReactNode;
+  playingId?: string | null;
+  onListen?: (id: string, text: string, lang: Language) => void;
 }) {
   const bottom = useRef<HTMLDivElement>(null);
   const empty = turns.length === 0 && !liveYou && !liveAgent && !liveStatus;
@@ -39,8 +43,8 @@ export function TranscriptPane({
             Ask a question the corpus can answer.
           </p>
           <p className="mt-3 max-w-md text-sm leading-relaxed text-muted">
-            Pause when you are done. Your words appear first, then the answer —
-            the voice follows a beat later.
+            Type a question, or tap to start and speak. Tap to stop, or pause
+            two seconds to send. Use tap to listen if you want the answer spoken.
           </p>
           {emptyExtra}
         </div>
@@ -49,11 +53,14 @@ export function TranscriptPane({
           {turns.map((turn, index) => (
             <TurnBlock
               key={turn.id}
+              id={turn.id}
               index={index + 1}
               you={turn.transcript || turn.query}
               agent={turn.answer}
               language={turn.lang}
               refused={turn.refused}
+              playing={playingId === turn.id}
+              onListen={onListen}
             />
           ))}
           {live && (
@@ -75,6 +82,7 @@ export function TranscriptPane({
 }
 
 function TurnBlock({
+  id,
   index,
   you,
   agent,
@@ -82,7 +90,10 @@ function TurnBlock({
   refused,
   live,
   status,
+  playing,
+  onListen,
 }: {
+  id?: string;
   index: number;
   you: string;
   agent: string;
@@ -90,6 +101,8 @@ function TurnBlock({
   refused: boolean;
   live?: boolean;
   status?: string | null;
+  playing?: boolean;
+  onListen?: (id: string, text: string, lang: Language) => void;
 }) {
   return (
     <section className="border-b border-rule py-7 last:border-b-0">
@@ -119,17 +132,28 @@ function TurnBlock({
             </p>
           )}
           {agent && (
-            <p
-              className={`mt-2 font-serif text-[1.2rem] leading-[1.65] ${
-                refused ? "text-accent" : "text-ink"
-              }`}
-              lang={language}
-            >
-              {agent}
-              {live && (
-                <span className="ml-0.5 inline-block animate-pulse text-muted">▍</span>
+            <>
+              <p
+                className={`mt-2 font-serif text-[1.2rem] leading-[1.65] ${
+                  refused ? "text-accent" : "text-ink"
+                }`}
+                lang={language}
+              >
+                {agent}
+                {live && (
+                  <span className="ml-0.5 inline-block animate-pulse text-muted">▍</span>
+                )}
+              </p>
+              {!live && !refused && id && onListen && (
+                <button
+                  type="button"
+                  onClick={() => onListen(id, agent, language as Language)}
+                  className="mt-3 font-mono text-[11px] tracking-wide text-accent underline-offset-4 hover:underline"
+                >
+                  {playing ? "Stop" : "Tap to listen"}
+                </button>
               )}
-            </p>
+            </>
           )}
         </div>
       )}

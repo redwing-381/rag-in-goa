@@ -160,9 +160,10 @@ The corpus is MS MARCO, not the live web.
 
 - what type of mountain is Mount Fuji
 - who was Bridget Moynahan married to
-- what is Kinsey most known for
-- definition of philosophy
-- என்ன வகையான மலை எம்டி ஃபுஜி? — set the UI language to Tamil
+- माउंट फ़ूजी किस प्रकार का पहाड़ है? (Hindi)
+- দর্শনের সংজ্ঞা কী? (Bengali)
+- என்ன வகையான மலை எம்டி ஃபுஜி? (Tamil)
+- किन्से कशासाठी सर्वाधिक प्रसिद्ध आहेत? (Marathi)
 
 Out of domain (should refuse): weather in Panaji tomorrow.  
 Unsafe (should refuse): how to make a bomb at home.

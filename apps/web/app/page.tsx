@@ -14,13 +14,10 @@ import { MicRecorder, RecorderError } from "@/lib/recorder";
 import { isEndCommand } from "@/lib/greetings";
 import { loadTurns, newTurnId, saveTurns, type SessionTurn } from "@/lib/session";
 import {
-  canSpeak,
   preloadVoices,
   setSarvamTts,
-  setSpeakListener,
-  speakNext,
+  speak,
   stopSpeaking,
-  takeSpeakable,
   whenSpeechEnds,
 } from "@/lib/speak";
 import { END_SILENCE_MS, createVad } from "@/lib/vad";
@@ -42,7 +39,6 @@ export default function Page() {
   const [language, setLanguage] = useState<Language>("en");
   const [orb, setOrb] = useState<OrbState>("idle");
   const [level, setLevel] = useState(0);
-  const [muted, setMuted] = useState(false);
   const [typed, setTyped] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [turns, setTurns] = useState<SessionTurn[]>([]);
@@ -54,33 +50,24 @@ export default function Page() {
   const [streaming, setStreaming] = useState(false);
   const [audioTurn, setAudioTurn] = useState(false);
   const [finalResponse, setFinalResponse] = useState<AskResponse | null>(null);
-  const [voicesReady, setVoicesReady] = useState(false);
   const [waitHint, setWaitHint] = useState<string | null>(null);
-  const [conversing, setConversing] = useState(false);
+  const [playingId, setPlayingId] = useState<string | null>(null);
 
   const recorder = useRef<MicRecorder | null>(null);
   const vad = useRef<ReturnType<typeof createVad> | null>(null);
   const heardSpeech = useRef(false);
   const sending = useRef(false);
-  const autoListen = useRef(false);
   const ending = useRef(false);
   const cycle = useRef(0);
   const abort = useRef<AbortController | null>(null);
-  const speakBuf = useRef("");
-  const mutedRef = useRef(muted);
+  const playingIdRef = useRef<string | null>(null);
   const languageRef = useRef(language);
   const orbRef = useRef(orb);
-  mutedRef.current = muted;
   languageRef.current = language;
   orbRef.current = orb;
 
   useEffect(() => {
     preloadVoices();
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    const mark = () => setVoicesReady(window.speechSynthesis.getVoices().length > 0);
-    mark();
-    window.speechSynthesis.addEventListener("voiceschanged", mark);
-    return () => window.speechSynthesis.removeEventListener("voiceschanged", mark);
   }, []);
 
   useEffect(() => {
@@ -103,11 +90,6 @@ export default function Page() {
     saveTurns(turns);
   }, [turns]);
 
-  useEffect(() => {
-    setSpeakListener(() => setOrb("speaking"));
-    return () => setSpeakListener(null);
-  }, []);
-
   const historyForRequest = useCallback((): HistoryTurn[] => {
     return turns
       .filter((turn) => (turn.kind ?? "qa") === "qa" && turn.query)
@@ -127,7 +109,6 @@ export default function Page() {
   const haltCapture = useCallback(() => {
     abort.current?.abort();
     abort.current = null;
-    autoListen.current = false;
     sending.current = false;
     heardSpeech.current = false;
     stopCapture();
@@ -166,23 +147,9 @@ export default function Page() {
       ending.current = false;
       return;
     }
-    setConversing(false);
     setOrb("idle");
     ending.current = false;
   }, [haltCapture]);
-
-  const finishSpeakThenListen = useCallback(async (id: number) => {
-    await whenSpeechEnds();
-    if (id !== cycle.current) return;
-    setOrb("idle");
-    if (autoListen.current && service?.ready) {
-      window.setTimeout(() => {
-        if (id === cycle.current && orbRef.current === "idle") {
-          void startListeningRef.current();
-        }
-      }, 200);
-    }
-  }, [service?.ready]);
 
   const consumeStream = useCallback(
     async (events: AsyncGenerator<StreamEvent>, queryHint: string, fromAudio: boolean) => {
@@ -196,14 +163,7 @@ export default function Page() {
       setDraftRefused(false);
       setFinalResponse(null);
       setSelectedId(null);
-      speakBuf.current = "";
       if (!fromAudio) setDraftYou(queryHint);
-
-      const flushSpeak = () => {
-        const rest = speakBuf.current.trim();
-        speakBuf.current = "";
-        if (rest && !mutedRef.current) speakNext(rest, languageRef.current);
-      };
 
       let last: AskResponse | null = null;
       try {
@@ -222,12 +182,6 @@ export default function Page() {
             setStages((current) => [...current, event]);
           } else if (event.type === "token") {
             setDraftAgent((current) => current + event.text);
-            if (!mutedRef.current) {
-              speakBuf.current += event.text;
-              const { chunks, rest } = takeSpeakable(speakBuf.current);
-              speakBuf.current = rest;
-              for (const chunk of chunks) speakNext(chunk, languageRef.current);
-            }
           } else if (event.type === "final") {
             last = event.response;
           }
@@ -240,13 +194,10 @@ export default function Page() {
       if (!last) return;
 
       if (last.refused) {
-        stopSpeaking();
-        speakBuf.current = "";
         setDraftAgent(last.answer);
         setDraftRefused(true);
       } else {
         setDraftAgent(last.answer);
-        flushSpeak();
       }
       setFinalResponse(last);
       const turn: SessionTurn = {
@@ -261,15 +212,10 @@ export default function Page() {
       };
       setTurns((current) => [...current, turn]);
       setSelectedId(turn.id);
-
-      const willSpeak = !last.refused && !mutedRef.current && canSpeak(last.answer_language);
-      if (willSpeak) setOrb("speaking");
-      await finishSpeakThenListen(id);
+      setOrb("idle");
     },
-    [endConversation, finishSpeakThenListen, pushUserLine],
+    [endConversation, pushUserLine],
   );
-
-  const startListeningRef = useRef<() => Promise<void>>(async () => {});
 
   const sendAudio = useCallback(
     async (wav: Blob) => {
@@ -327,10 +273,10 @@ export default function Page() {
     if (!service?.ready || ending.current) return;
     setError(null);
     stopSpeaking();
-    heardSpeech.current = false;
+    playingIdRef.current = null;
+    setPlayingId(null);
     sending.current = false;
-    autoListen.current = true;
-    setConversing(true);
+    heardSpeech.current = false;
     const mic = new MicRecorder();
     recorder.current = mic;
     try {
@@ -362,8 +308,6 @@ export default function Page() {
     }
   }, [service?.ready, stopAndSend]);
 
-  startListeningRef.current = startListening;
-
   const seconds = useRecordingClock(orb === "listening", () => void stopAndSend());
 
   useEffect(() => {
@@ -383,8 +327,6 @@ export default function Page() {
       setTyped(text);
       setError(null);
       stopSpeaking();
-      autoListen.current = true;
-      setConversing(true);
       if (isEndCommand(text)) {
         pushUserLine(text);
         await endConversation();
@@ -407,16 +349,35 @@ export default function Page() {
     [consumeStream, endConversation, historyForRequest, pushUserLine],
   );
 
-  const stopVoice = useCallback(() => {
-    autoListen.current = false;
+  const playAnswer = useCallback((id: string, text: string, lang: Language) => {
+    if (playingIdRef.current === id) {
+      stopSpeaking();
+      playingIdRef.current = null;
+      setPlayingId(null);
+      return;
+    }
     stopSpeaking();
+    playingIdRef.current = id;
+    setPlayingId(id);
+    speak(text, lang);
+    void whenSpeechEnds().then(() => {
+      if (playingIdRef.current === id) {
+        playingIdRef.current = null;
+        setPlayingId(null);
+      }
+    });
+  }, []);
+
+  const stopVoice = useCallback(() => {
+    stopSpeaking();
+    playingIdRef.current = null;
+    setPlayingId(null);
     setOrb("idle");
   }, []);
 
   const endVoiceChat = useCallback(() => {
     cycle.current += 1;
     abort.current?.abort();
-    autoListen.current = false;
     sending.current = false;
     stopCapture();
     recorder.current?.cancel();
@@ -432,8 +393,9 @@ export default function Page() {
     cycle.current += 1;
     haltCapture();
     stopSpeaking();
+    playingIdRef.current = null;
+    setPlayingId(null);
     ending.current = false;
-    setConversing(false);
     setOrb("idle");
     setTurns([]);
     setSelectedId(null);
@@ -508,16 +470,6 @@ export default function Page() {
                 ))}
               </select>
             </label>
-            <button
-              type="button"
-              onClick={() => {
-                if (!muted) stopSpeaking();
-                setMuted((value) => !value);
-              }}
-              className="font-mono text-[11px] text-muted hover:text-ink"
-            >
-              {muted ? "muted" : "voice on"}
-            </button>
             <ServiceStatus service={service} error={serviceError} />
             <button
               type="button"
@@ -552,12 +504,14 @@ export default function Page() {
               inFlight && !draftAgent
                 ? waitHint || (draftYou ? "Looking that up…" : null)
                 : inFlight && draftAgent && orb === "thinking"
-                  ? "Voice is catching up…"
+                  ? "Writing the answer…"
                   : null
             }
             language={selected?.lang ?? language}
             refused={refused}
             live={inFlight}
+            playingId={playingId}
+            onListen={playAnswer}
             emptyExtra={
               orb === "idle" && turns.length === 0 && !error ? (
                 <SampleQuestions
@@ -625,12 +579,6 @@ export default function Page() {
               className="w-full border-0 border-b border-rule bg-transparent py-2 text-center text-sm
                 text-ink placeholder:text-muted/70 focus:border-ink focus:outline-none disabled:opacity-40"
             />
-            {voicesReady && !muted && !canSpeak(language) && (
-              <p className="mt-2 text-center text-[11px] text-muted">
-                This browser has no {LANGUAGES.find((entry) => entry.code === language)?.label ?? language}{" "}
-                voice. The answer stays on screen.
-              </p>
-            )}
             {error && <p className="mt-2 text-center text-sm text-accent">{error}</p>}
           </div>
         </div>
