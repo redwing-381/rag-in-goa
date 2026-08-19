@@ -96,8 +96,10 @@ class Settings(BaseSettings):
     sarvam_timeout_s: float = 20.0
     sarvam_tts_url: str = "https://api.sarvam.ai/text-to-speech"
     sarvam_tts_model: str = "bulbul:v3"
-    sarvam_tts_speaker: str = "ritu"
-    sarvam_tts_pace: float = 0.95
+    # Ishita is Sarvam's recommended conversational female voice for en-IN / ta-IN.
+    sarvam_tts_speaker: str = "ishita"
+    sarvam_tts_pace: float = 0.9
+    sarvam_tts_temperature: float = 0.6
 
     @property
     def docs_bin(self) -> Path:

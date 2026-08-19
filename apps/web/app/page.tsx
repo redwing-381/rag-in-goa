@@ -285,6 +285,8 @@ export default function Page() {
       setSelectedId(null);
       if (mic.mediaStream) {
         vad.current = createVad(mic.mediaStream, {
+          silenceMs: 2000,
+          minSpeechMs: 700,
           onLevel: setLevel,
           onSpeechStart: () => {
             heardSpeech.current = true;
@@ -307,14 +309,6 @@ export default function Page() {
   useEffect(() => {
     if (orb === "listening" && seconds >= MAX_SECONDS) void stopAndSend();
   }, [orb, seconds, stopAndSend]);
-
-  const toggleOrb = useCallback(() => {
-    if (orb === "listening") {
-      void stopAndSend();
-      return;
-    }
-    if (orb === "idle") void startListening();
-  }, [orb, startListening, stopAndSend]);
 
   const submitText = useCallback(
     async (query: string, lang: Language) => {
@@ -346,6 +340,26 @@ export default function Page() {
     },
     [consumeStream, historyForRequest],
   );
+
+  const stopVoice = useCallback(() => {
+    autoListen.current = false;
+    stopSpeaking();
+    setOrb("idle");
+  }, []);
+
+  const endVoiceChat = useCallback(() => {
+    cycle.current += 1;
+    abort.current?.abort();
+    autoListen.current = false;
+    sending.current = false;
+    stopCapture();
+    recorder.current?.cancel();
+    recorder.current = null;
+    stopSpeaking();
+    setWaitHint(null);
+    setStreaming(false);
+    setOrb("idle");
+  }, [stopCapture]);
 
   const newChat = useCallback(() => {
     cycle.current += 1;
@@ -401,145 +415,163 @@ export default function Page() {
           }
         : finalResponse;
 
+  const docsLabel = service?.docs
+    ? `${service.docs.toLocaleString()} documents`
+    : "MS MARCO-XI";
+
   return (
-    <div className="flex h-dvh overflow-hidden">
-      <div className="hidden lg:block">
-        <SidebarHistory
-          turns={turns}
-          selectedId={selectedId}
-          onSelect={(id) => {
-            if (live) return;
-            setSelectedId(id);
-          }}
-          onNewChat={newChat}
-        />
-      </div>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-edge px-5 py-3 lg:hidden">
-          <p className="text-sm text-white/70">Voice agent</p>
-          <button
-            type="button"
-            onClick={newChat}
-            className="rounded-full border border-edge px-2.5 py-1 text-[11px] text-white/60"
-          >
-            New chat
-          </button>
-        </header>
-
-        <TranscriptPane
-          turns={turns}
-          liveYou={inFlight ? draftYou : ""}
-          liveAgent={inFlight ? draftAgent : ""}
-          liveStatus={
-            inFlight && !draftAgent
-              ? waitHint || (draftYou ? "Looking that up…" : null)
-              : inFlight && draftAgent && orb === "thinking"
-                ? "Voice is catching up…"
-                : null
-          }
-          language={selected?.lang ?? language}
-          refused={refused}
-          live={inFlight}
-        />
-        {shownResponse && !streaming && (
-          <div className="shrink-0 px-6 pb-3">
-            <CitationStrip response={shownResponse} />
+    <div className="flex h-dvh flex-col overflow-hidden bg-paper text-ink">
+      <header className="shrink-0 border-b border-rule px-5 py-3 lg:px-6">
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <div>
+            <p className="font-serif text-xl leading-none">RAG in Goa</p>
+            <p className="mt-1 font-mono text-[11px] tracking-wide text-muted">
+              MS MARCO-XI · {docsLabel}
+            </p>
           </div>
-        )}
-
-        <div className="flex min-h-[220px] flex-[2] flex-col items-center justify-center gap-5 border-t border-edge bg-surface/30 px-5 py-5">
-          <AgentOrb
-            state={orb}
-            level={level}
-            seconds={seconds}
-            disabled={!service?.ready}
-            onToggle={toggleOrb}
-          />
-
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            {LANGUAGES.map((entry) => (
-              <button
-                key={entry.code}
-                type="button"
-                onClick={() => setLanguage(entry.code)}
-                className={`rounded-full border px-3 py-1 text-xs transition ${
-                  language === entry.code
-                    ? "border-accent bg-accent/15 text-white"
-                    : "border-edge text-white/50 hover:border-white/25 hover:text-white/80"
-                }`}
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 text-sm">
+              <span className="font-mono text-[11px] text-muted">Language</span>
+              <select
+                value={language}
+                onChange={(event) => setLanguage(event.target.value as Language)}
+                className="border-0 border-b border-rule bg-transparent py-0.5 text-sm text-ink
+                  focus:border-ink focus:outline-none"
               >
-                <span lang={entry.code}>{entry.native}</span>
-              </button>
-            ))}
+                {LANGUAGES.map((entry) => (
+                  <option key={entry.code} value={entry.code}>
+                    {entry.native}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               type="button"
               onClick={() => {
                 if (!muted) stopSpeaking();
                 setMuted((value) => !value);
               }}
-              className="rounded-full border border-edge px-3 py-1 text-xs text-white/50
-                hover:border-white/25 hover:text-white/80"
+              className="font-mono text-[11px] text-muted hover:text-ink"
             >
               {muted ? "muted" : "voice on"}
             </button>
+            <ServiceStatus service={service} error={serviceError} />
+            <button
+              type="button"
+              onClick={newChat}
+              className="font-mono text-[11px] text-muted underline-offset-2 hover:text-ink hover:underline lg:hidden"
+            >
+              Clear
+            </button>
           </div>
-          {voicesReady && !muted && !canSpeak(language) && (
-            <p className="max-w-sm text-center text-[11px] text-white/40">
-              This browser has no {LANGUAGES.find((entry) => entry.code === language)?.label ?? language}{" "}
-              voice. The answer stays on screen.
+        </div>
+      </header>
+
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="hidden lg:block">
+          <SidebarHistory
+            turns={turns}
+            selectedId={selectedId}
+            onSelect={(id) => {
+              if (live) return;
+              setSelectedId(id);
+            }}
+            onNewChat={newChat}
+          />
+        </div>
+
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <TranscriptPane
+            turns={turns}
+            liveYou={inFlight ? draftYou : ""}
+            liveAgent={inFlight ? draftAgent : ""}
+            liveStatus={
+              inFlight && !draftAgent
+                ? waitHint || (draftYou ? "Looking that up…" : null)
+                : inFlight && draftAgent && orb === "thinking"
+                  ? "Voice is catching up…"
+                  : null
+            }
+            language={selected?.lang ?? language}
+            refused={refused}
+            live={inFlight}
+            emptyExtra={
+              orb === "idle" && turns.length === 0 && !error ? (
+                <SampleQuestions
+                  disabled={!service?.ready}
+                  onPick={(text, lang) => void submitText(text, lang)}
+                />
+              ) : undefined
+            }
+          />
+          {shownResponse && !streaming && (
+            <div className="shrink-0 overflow-y-auto px-6 pb-4 lg:px-10">
+              <CitationStrip response={shownResponse} />
+            </div>
+          )}
+        </div>
+
+        <aside className="hidden h-full w-[300px] shrink-0 flex-col overflow-y-auto border-l border-rule px-4 py-4 lg:flex">
+          <LiveStages
+            stages={stages}
+            pending={streaming}
+            audio={audioTurn}
+            retrievalMs={shownTrace?.retrieval_ms}
+          />
+          {shownTrace ? (
+            <div className="mt-4">
+              <TracePanel
+                trace={shownTrace}
+                budgetMs={service?.retrieval_budget_ms ?? 200}
+              />
+            </div>
+          ) : (
+            <p className="mt-4 font-mono text-[11px] leading-relaxed text-muted">
+              Timings for the last turn land here.
             </p>
           )}
+        </aside>
+      </div>
 
-          <div className="flex w-full max-w-lg gap-2">
+      <footer className="shrink-0 border-t border-rule px-5 py-5 lg:px-6">
+        <div className="mx-auto flex w-full max-w-md flex-col items-center">
+          <AgentOrb
+            state={orb}
+            level={level}
+            seconds={seconds}
+            recover={orb === "idle" && Boolean(turns.at(-1)?.refused)}
+            disabled={!service?.ready}
+            onStart={() => void startListening()}
+            onStop={() => void stopAndSend()}
+            onStopSpeaking={stopVoice}
+            onEndChat={endVoiceChat}
+          />
+          <div className="mt-5 w-full">
             <input
               value={typed}
               onChange={(event) => setTyped(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") void submitText(typed, language);
               }}
-              placeholder="or type a follow-up"
+              placeholder={
+                orb === "idle"
+                  ? "Or type the question here"
+                  : "Type is paused while the voice turn is running"
+              }
               disabled={orb !== "idle" || !service?.ready}
-              className="min-w-0 flex-1 rounded-xl border border-edge bg-raised/60 px-3.5 py-2.5 text-sm
-                text-white/85 placeholder:text-white/25 focus:border-accent/60 focus:outline-none
-                disabled:opacity-40"
+              className="w-full border-0 border-b border-rule bg-transparent py-2 text-center text-sm
+                text-ink placeholder:text-muted/70 focus:border-ink focus:outline-none disabled:opacity-40"
             />
-            <button
-              type="button"
-              onClick={() => void submitText(typed, language)}
-              disabled={orb !== "idle" || !typed.trim() || !service?.ready}
-              className="shrink-0 rounded-xl bg-white/10 px-4 py-2.5 text-sm font-medium text-white/85
-                transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              Ask
-            </button>
+            {voicesReady && !muted && !canSpeak(language) && (
+              <p className="mt-2 text-center text-[11px] text-muted">
+                This browser has no {LANGUAGES.find((entry) => entry.code === language)?.label ?? language}{" "}
+                voice. The answer stays on screen.
+              </p>
+            )}
+            {error && <p className="mt-2 text-center text-sm text-accent">{error}</p>}
           </div>
-
-          {orb === "idle" && turns.length === 0 && !error && (
-            <SampleQuestions
-              disabled={!service?.ready}
-              onPick={(text, lang) => void submitText(text, lang)}
-            />
-          )}
-
-          {error && <p className="max-w-md text-center text-sm text-warm">{error}</p>}
         </div>
-      </div>
-
-      <aside className="hidden h-full w-[280px] shrink-0 flex-col overflow-y-auto border-l border-edge bg-surface/40 p-3 lg:flex">
-        <LiveStages stages={stages} pending={streaming} audio={audioTurn} />
-        {shownTrace && (
-          <div className="mt-3">
-            <TracePanel
-              trace={shownTrace}
-              budgetMs={service?.retrieval_budget_ms ?? 200}
-            />
-          </div>
-        )}
-        <div className="mt-auto pt-6 text-[11px] leading-relaxed text-white/30">
-          <ServiceStatus service={service} error={serviceError} />
-        </div>
-      </aside>
+      </footer>
     </div>
   );
 }
@@ -553,20 +585,19 @@ function ServiceStatus({
 }) {
   if (error) {
     return (
-      <p className="inline-flex items-center gap-2 text-warm">
-        <span className="h-1.5 w-1.5 rounded-full bg-warm" />
+      <p className="inline-flex items-center gap-2 font-mono text-[11px] text-accent">
+        <span className="h-1.5 w-1.5 rounded-full bg-accent" />
         {error}
       </p>
     );
   }
-  if (!service) return <p>checking the service…</p>;
+  if (!service) {
+    return <p className="font-mono text-[11px] text-muted">checking the service…</p>;
+  }
   return (
-    <p className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span className="inline-flex items-center gap-1.5">
-        <span className={`h-1.5 w-1.5 rounded-full ${service.ready ? "bg-mint" : "bg-warm"}`} />
-        {service.ready ? "ready" : "loading"}
-      </span>
-      {service.chunks !== null && <span>{service.chunks.toLocaleString()} chunks</span>}
+    <p className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted">
+      <span className={`h-1.5 w-1.5 rounded-full ${service.ready ? "bg-mint" : "bg-accent"}`} />
+      {service.ready ? "ready" : "loading"}
     </p>
   );
 }

@@ -66,6 +66,7 @@ class SarvamTTS:
                 "model": self.settings.sarvam_tts_model,
                 "speaker": self.settings.sarvam_tts_speaker,
                 "pace": self.settings.sarvam_tts_pace,
+                "temperature": self.settings.sarvam_tts_temperature,
                 "speech_sample_rate": 24000,
                 "output_audio_codec": "wav",
             },

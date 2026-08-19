@@ -1,8 +1,9 @@
 /**
  * Voice-activity detection on the same AnalyserNode style as the level meter.
  *
- * Speech starts when RMS stays above a threshold; it ends after ~500 ms of
- * quiet. The recorder still owns capture and the 30 s hard cap.
+ * Speech starts when RMS stays above a threshold; it ends after 2 s of
+ * quiet so a short breath does not cut the question. The recorder still
+ * owns capture and the 30 s hard cap.
  */
 
 export type VadHandle = {
@@ -15,13 +16,15 @@ export function createVad(
   options: {
     threshold?: number;
     silenceMs?: number;
+    minSpeechMs?: number;
     onSpeechStart?: () => void;
     onSpeechEnd?: () => void;
     onLevel?: (level: number) => void;
   } = {},
 ): VadHandle {
-  const threshold = options.threshold ?? 0.045;
-  const silenceMs = options.silenceMs ?? 500;
+  const threshold = options.threshold ?? 0.06;
+  const silenceMs = options.silenceMs ?? 2000;
+  const minSpeechMs = options.minSpeechMs ?? 700;
 
   const context = new AudioContext();
   const analyser = context.createAnalyser();
@@ -30,6 +33,8 @@ export function createVad(
   const data = new Uint8Array(analyser.frequencyBinCount);
 
   let speaking = false;
+  let confirmed = false;
+  let speechStarted: number | null = null;
   let silenceStarted: number | null = null;
   let raf = 0;
   let stopped = false;
@@ -52,15 +57,22 @@ export function createVad(
     if (level >= threshold) {
       if (!speaking) {
         speaking = true;
+        speechStarted = performance.now();
+      }
+      if (!confirmed && speechStarted && performance.now() - speechStarted >= minSpeechMs) {
+        confirmed = true;
         options.onSpeechStart?.();
       }
       silenceStarted = null;
     } else if (speaking) {
       if (silenceStarted === null) silenceStarted = performance.now();
       else if (performance.now() - silenceStarted >= silenceMs) {
+        const shouldSend = confirmed;
         speaking = false;
+        confirmed = false;
+        speechStarted = null;
         silenceStarted = null;
-        options.onSpeechEnd?.();
+        if (shouldSend) options.onSpeechEnd?.();
       }
     }
 

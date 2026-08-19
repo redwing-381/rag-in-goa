@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  transpilePackages: ["orb-ui"],
   // The mic requires a secure context. localhost counts as secure, so dev works,
   // but any other host must be served over HTTPS or getUserMedia is unavailable.
   env: {

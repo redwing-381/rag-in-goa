@@ -10,7 +10,11 @@ data/slim
 data/audio
 data/index-test
 data/corpus
+node_modules
+package-lock.json
 **/__pycache__
 **/*.pyc
 ragoa-src.zip
 *.tar.gz
+.env
+.env.*

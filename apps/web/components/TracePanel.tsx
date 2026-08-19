@@ -47,23 +47,23 @@ export function TracePanel({ trace, budgetMs }: { trace: Trace; budgetMs: number
   const withinBudget = trace.retrieval_ms <= budgetMs;
 
   return (
-    <section className="rounded-2xl border border-edge bg-surface/60 p-5">
+    <section>
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         className="flex w-full items-baseline justify-between gap-3 text-left"
       >
-        <h2 className="text-sm font-semibold tracking-wide text-white/80">
+        <h2 className="font-mono text-[11px] tracking-wide text-muted">
           How long that took
-          <span className={`ml-2 font-normal ${withinBudget ? "text-mint" : "text-warm"}`}>
+          <span className={`ml-2 ${withinBudget ? "text-mint" : "text-accent"}`}>
             · {trace.retrieval_ms.toFixed(0)} ms retrieval
           </span>
         </h2>
-        <span className="text-[11px] text-white/35">{open ? "hide" : "show"}</span>
+        <span className="text-[11px] text-muted">{open ? "hide" : "show"}</span>
       </button>
 
       {!open && (
-        <p className="mt-2 text-xs text-white/35">
+        <p className="mt-1 text-xs text-muted">
           {withinBudget ? "Inside the 200 ms budget." : "Over the 200 ms budget."}
           {trace.llm_ttft_ms !== null && ` Generation ${trace.llm_ttft_ms.toFixed(0)} ms.`}
         </p>
@@ -72,31 +72,27 @@ export function TracePanel({ trace, budgetMs }: { trace: Trace; budgetMs: number
       {open && (
         <>
       <header className="mb-4 mt-4 flex items-baseline justify-between gap-3">
-        <p className="text-[11px] font-semibold tracking-wider text-white/35 uppercase">
-          Latency trace
-        </p>
-        <code className="text-[11px] text-white/35">{trace.request_id}</code>
+        <p className="font-mono text-[11px] tracking-wide text-muted">Latency trace</p>
+        <code className="font-mono text-[11px] text-muted">{trace.request_id}</code>
       </header>
 
       <div className="mb-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
         <div>
-          <span className="text-white/45">retrieval </span>
-          <span className={withinBudget ? "font-semibold text-mint" : "font-semibold text-warm"}>
+          <span className="text-muted">retrieval </span>
+          <span className={withinBudget ? "font-medium text-mint" : "font-medium text-accent"}>
             {trace.retrieval_ms.toFixed(1)} ms
           </span>
-          <span className="text-white/35"> / {budgetMs.toFixed(0)} ms budget</span>
+          <span className="text-muted"> / {budgetMs.toFixed(0)} ms budget</span>
         </div>
         {trace.llm_ttft_ms !== null && (
           <div>
-            <span className="text-white/45">generation </span>
-            <span className="font-semibold text-white/85">
-              {trace.llm_ttft_ms.toFixed(0)} ms
-            </span>
+            <span className="text-muted">generation </span>
+            <span className="font-medium text-ink">{trace.llm_ttft_ms.toFixed(0)} ms</span>
           </div>
         )}
         <div>
-          <span className="text-white/45">end to end </span>
-          <span className="font-semibold text-white/85">{trace.total_ms.toFixed(0)} ms</span>
+          <span className="text-muted">end to end </span>
+          <span className="font-medium text-ink">{trace.total_ms.toFixed(0)} ms</span>
         </div>
       </div>
 
@@ -112,16 +108,14 @@ export function TracePanel({ trace, budgetMs }: { trace: Trace; budgetMs: number
       )}
 
       {trace.degradations.length > 0 && (
-        <div className="mt-5 rounded-xl border border-warm/25 bg-warm/5 p-3">
-          <p className="mb-1.5 text-xs font-semibold tracking-wide text-warm uppercase">
-            Ran degraded
-          </p>
-          <ul className="space-y-1 text-sm text-white/70">
+        <div className="mt-5 border border-accent/30 bg-accent/5 p-3">
+          <p className="mb-1.5 font-mono text-[11px] tracking-wide text-accent">Ran degraded</p>
+          <ul className="space-y-1 text-sm text-ink/80">
             {trace.degradations.map((item) => (
               <li key={item}>{DEGRADATION_COPY[item] ?? item}</li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-white/40">
+          <p className="mt-2 text-xs text-muted">
             The deadline dropped optional stages rather than overrun. Accuracy fell in a
             declared order; the budget held.
           </p>
@@ -139,9 +133,9 @@ function BudgetBar({ used, budget }: { used: number; budget: number }) {
 
   return (
     <div className="mb-5">
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/8">
+      <div className="h-px w-full overflow-hidden bg-rule">
         <div
-          className={`h-full rounded-full ${over ? "bg-warm" : "bg-mint"}`}
+          className={`h-full ${over ? "bg-accent" : "bg-ink"}`}
           style={{ width: `${Math.max(ratio * 100, 1.5)}%` }}
         />
       </div>
@@ -162,27 +156,25 @@ function StageList({
 
   return (
     <div className="mt-4">
-      <p className="mb-2 text-[11px] font-semibold tracking-wider text-white/35 uppercase">
-        {title}
-      </p>
+      <p className="mb-2 font-mono text-[11px] tracking-wide text-muted">{title}</p>
       <ul className="space-y-1.5">
         {spans.map((span, index) => (
           <li key={`${span.name}-${index}`} className="grid grid-cols-[1fr_auto] items-center gap-3">
             <div className="min-w-0">
               <div className="flex items-baseline gap-2">
-                <span className="truncate text-sm text-white/80">
+                <span className="truncate text-sm text-ink">
                   {STAGE_LABELS[span.name] ?? span.name}
                 </span>
                 <StageMeta metadata={span.metadata} />
               </div>
-              <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/5">
+              <div className="mt-1 h-px w-full overflow-hidden bg-rule">
                 <div
-                  className="h-full rounded-full bg-accent/60"
+                  className="h-full bg-ink/50"
                   style={{ width: `${Math.max((span.duration_ms / slowest) * 100, 1)}%` }}
                 />
               </div>
             </div>
-            <span className="text-sm tabular-nums text-white/55">
+            <span className="font-mono text-sm tabular-nums text-muted">
               {span.duration_ms < 1
                 ? `${span.duration_ms.toFixed(2)} ms`
                 : `${span.duration_ms.toFixed(1)} ms`}
@@ -199,7 +191,7 @@ function StageMeta({ metadata }: { metadata: Record<string, string | number | bo
   if (entries.length === 0) return null;
 
   return (
-    <span className="shrink-0 text-[11px] text-white/30">
+    <span className="shrink-0 font-mono text-[11px] text-muted">
       {entries.map(([key, value]) => `${key}=${value}`).join(" ")}
     </span>
   );

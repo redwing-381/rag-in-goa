@@ -24,6 +24,7 @@ let draining = false;
 let currentAudio: HTMLAudioElement | null = null;
 let currentUrl: string | null = null;
 let onSpeakStart: (() => void) | null = null;
+let speakGeneration = 0;
 
 export function setSpeakListener(listener: (() => void) | null): void {
   onSpeakStart = listener;
@@ -101,8 +102,12 @@ function enqueueBrowser(text: string, language: Language): boolean {
   return true;
 }
 
-function playBlob(blob: Blob): Promise<void> {
+function playBlob(blob: Blob, generation: number): Promise<void> {
   return new Promise((resolve) => {
+    if (generation !== speakGeneration) {
+      resolve();
+      return;
+    }
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     currentAudio = audio;
@@ -133,25 +138,32 @@ function startFetch(text: string, language: Language): Promise<Blob | null> | nu
 async function drainQueue(): Promise<void> {
   if (draining) return;
   draining = true;
-  while (playJobs.length > 0) {
+  const generation = speakGeneration;
+  while (playJobs.length > 0 && generation === speakGeneration) {
     const job = playJobs.shift();
     if (!job) break;
     const blob = job.audio ? await job.audio : null;
+    if (generation !== speakGeneration) break;
     if (blob) {
-      await playBlob(blob);
+      await playBlob(blob, generation);
       continue;
     }
-    enqueueBrowser(job.text, job.language);
-    onSpeakStart?.();
-    await whenBrowserSpeechEnds();
+    if (enqueueBrowser(job.text, job.language)) {
+      onSpeakStart?.();
+      await whenBrowserSpeechEnds(generation);
+    }
   }
-  draining = false;
+  if (generation === speakGeneration) draining = false;
 }
 
-async function whenBrowserSpeechEnds(): Promise<void> {
+async function whenBrowserSpeechEnds(generation: number): Promise<void> {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
   await new Promise<void>((resolve) => {
     const check = () => {
+      if (generation !== speakGeneration) {
+        resolve();
+        return;
+      }
       if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
         resolve();
         return;
@@ -168,7 +180,7 @@ export function speak(text: string, language: Language): boolean {
   return speakNext(text, language);
 }
 
-/** Queue a phrase. Sarvam first; browser voice if that path is down. */
+/** Queue a phrase. Use Sarvam if the clip is already in, else the browser voice. */
 export function speakNext(text: string, language: Language): boolean {
   const spoken = cleanForSpeech(text);
   if (!spoken) return false;
@@ -179,9 +191,15 @@ export function speakNext(text: string, language: Language): boolean {
 }
 
 export function stopSpeaking(): void {
+  speakGeneration += 1;
   playJobs.length = 0;
+  draining = false;
   if (currentAudio) {
+    currentAudio.onended = null;
+    currentAudio.onerror = null;
     currentAudio.pause();
+    currentAudio.removeAttribute("src");
+    currentAudio.load();
     currentAudio = null;
   }
   if (currentUrl) {
@@ -193,10 +211,15 @@ export function stopSpeaking(): void {
   }
 }
 
-/** Resolves once both the Sarvam queue and the browser voice are idle. */
+/** Resolves once both the Sarvam queue and the browser voice are idle, or cut. */
 export function whenSpeechEnds(): Promise<void> {
+  const generation = speakGeneration;
   return new Promise((resolve) => {
     const check = () => {
+      if (generation !== speakGeneration) {
+        resolve();
+        return;
+      }
       const browserBusy =
         typeof window !== "undefined" &&
         Boolean(window.speechSynthesis?.speaking || window.speechSynthesis?.pending);

@@ -96,7 +96,7 @@ export class MicRecorder {
     if (recorded.size === 0) {
       throw new RecorderError("Nothing was recorded. Check the microphone and try again.");
     }
-    return encodeWav(await resampleToMono16k(recorded));
+    return encodeWav(trimSilence(await resampleToMono16k(recorded)));
   }
 
   /** Drop the mic without producing audio, e.g. when the user cancels. */
@@ -141,6 +141,21 @@ async function resampleToMono16k(blob: Blob): Promise<Float32Array> {
 
   const rendered = await offline.startRendering();
   return rendered.getChannelData(0);
+}
+
+/** Drop leading/trailing hush so the 2 s send-pause is not sent to STT. */
+function trimSilence(samples: Float32Array, threshold = 0.02): Float32Array {
+  let start = 0;
+  let end = samples.length - 1;
+  while (start < end && Math.abs(samples[start]) < threshold) start += 1;
+  while (end > start && Math.abs(samples[end]) < threshold) end -= 1;
+  const pad = 2_400; // 150 ms at 16 kHz
+  start = Math.max(0, start - pad);
+  end = Math.min(samples.length - 1, end + pad);
+  if (end - start < TARGET_SAMPLE_RATE * 0.35) {
+    return samples;
+  }
+  return samples.subarray(start, end + 1);
 }
 
 /** Write a 16-bit PCM WAV container around mono float samples. */

@@ -7,11 +7,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     TOKENIZERS_PARALLELISM=false \
     RAGOA_ENCODER=onnx \
-    RAGOA_RERANK=1 \
+    RAGOA_RERANK=0 \
     RAGOA_STT=1 \
     RAGOA_INDEX_DIR=data/index
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        g++ \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 

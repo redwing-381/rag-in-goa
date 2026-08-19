@@ -1,0 +1,25 @@
+---
+description: State the problem first; only build a workaround after the user asks
+alwaysApply: true
+---
+
+# Diagnose first, then wait
+
+When something is broken, missing, or blocked:
+
+1. Say what failed, in plain language.
+2. Say the likely cause.
+3. Stop. Do not implement a workaround, rewrite a cell, or change the approach yet.
+
+Only build an alternative after the user clearly asks — for example "make the solution", "do the workaround", or "go ahead".
+
+```text
+❌ BAD
+Clone failed, so I will zip the repo and rewrite the notebook.
+
+✅ GOOD
+Clone failed because the GitHub repo is private, so Colab cannot log in.
+Say if you want a workaround.
+```
+
+Do not treat "what is wrong?" or "do I need to change anything?" as permission to implement. Answer the question. Wait for the go-ahead.

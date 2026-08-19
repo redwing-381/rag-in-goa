@@ -18,29 +18,33 @@ export function SampleQuestions({
   onPick: (text: string, lang: Language) => void;
 }) {
   return (
-    <div className="w-full max-w-md px-6">
-      <p className="mb-2 text-[11px] font-semibold tracking-wider text-white/35 uppercase">
-        Try one of these
-      </p>
-      <ul className="flex flex-wrap gap-2">
-        {SAMPLE_QUESTIONS.map((sample) => (
+    <div className="mt-8">
+      <p className="font-mono text-[11px] tracking-wide text-muted">Try one</p>
+      <ol className="mt-3 space-y-2">
+        {SAMPLE_QUESTIONS.map((sample, index) => (
           <li key={sample.text}>
             <button
               type="button"
               disabled={disabled}
               onClick={() => onPick(sample.text, sample.lang)}
-              className="rounded-full border border-edge bg-raised/50 px-3 py-1.5 text-left text-xs
-                text-white/70 transition hover:border-accent/40 hover:text-white
-                disabled:cursor-not-allowed disabled:opacity-40"
+              className="group flex w-full items-baseline gap-3 text-left disabled:cursor-not-allowed disabled:opacity-40"
             >
+              <span className="font-mono text-[11px] tabular-nums text-muted">
+                {String(index + 1).padStart(2, "0")}
+              </span>
               {sample.label && (
-                <span className="mr-1.5 text-accent-soft">{sample.label}</span>
+                <span className="shrink-0 text-[11px] text-accent">{sample.label}</span>
               )}
-              <span lang={sample.lang}>{sample.text}</span>
+              <span
+                lang={sample.lang}
+                className="text-[15px] leading-snug text-ink/80 underline-offset-4 group-hover:underline"
+              >
+                {sample.text}
+              </span>
             </button>
           </li>
         ))}
-      </ul>
+      </ol>
     </div>
   );
 }

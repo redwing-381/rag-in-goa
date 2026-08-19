@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
     pipeline, manifest = build_pipeline(
         index_dir=index_dir,
         encoder_kind=encoder_kind,
-        use_rerank=_env_flag("RAGOA_RERANK", True),
+        use_rerank=_env_flag("RAGOA_RERANK", False),
         use_sparse=_env_flag("RAGOA_SPARSE", True),
         # Explicit rather than inferred from whether a key happens to be present,
         # so tests can exercise the unconfigured path without depending on the

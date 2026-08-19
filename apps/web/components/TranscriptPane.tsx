@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import type { SessionTurn } from "@/lib/session";
 import type { AskResponse } from "@/lib/types";
@@ -13,6 +13,7 @@ export function TranscriptPane({
   language,
   refused,
   live,
+  emptyExtra,
 }: {
   turns: SessionTurn[];
   liveYou: string;
@@ -21,6 +22,7 @@ export function TranscriptPane({
   language: string;
   refused: boolean;
   live: boolean;
+  emptyExtra?: ReactNode;
 }) {
   const bottom = useRef<HTMLDivElement>(null);
   const empty = turns.length === 0 && !liveYou && !liveAgent && !liveStatus;
@@ -30,20 +32,24 @@ export function TranscriptPane({
   }, [turns.length, liveYou, liveAgent, liveStatus]);
 
   return (
-    <section className="flex min-h-0 flex-[3] flex-col overflow-y-auto px-6 py-6">
+    <section className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-8 lg:px-10">
       {empty ? (
-        <div className="m-auto max-w-md text-center">
-          <p className="text-lg text-white/70">Talk like you would to a person.</p>
-          <p className="mt-2 text-sm text-white/40">
-            Pause when you are done. You will see your words first, then the
-            answer as it is written — the voice follows a beat later.
+        <div className="m-auto w-full max-w-xl">
+          <p className="font-serif text-2xl leading-snug text-ink">
+            Ask a question the corpus can answer.
           </p>
+          <p className="mt-3 max-w-md text-sm leading-relaxed text-muted">
+            Pause when you are done. Your words appear first, then the answer —
+            the voice follows a beat later.
+          </p>
+          {emptyExtra}
         </div>
       ) : (
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
-          {turns.map((turn) => (
+        <article className="mx-auto w-full max-w-xl">
+          {turns.map((turn, index) => (
             <TurnBlock
               key={turn.id}
+              index={index + 1}
               you={turn.transcript || turn.query}
               agent={turn.answer}
               language={turn.lang}
@@ -52,6 +58,7 @@ export function TranscriptPane({
           ))}
           {live && (
             <TurnBlock
+              index={turns.length + 1}
               you={liveYou}
               agent={liveAgent}
               language={language}
@@ -61,13 +68,14 @@ export function TranscriptPane({
             />
           )}
           <div ref={bottom} />
-        </div>
+        </article>
       )}
     </section>
   );
 }
 
 function TurnBlock({
+  index,
   you,
   agent,
   language,
@@ -75,6 +83,7 @@ function TurnBlock({
   live,
   status,
 }: {
+  index: number;
   you: string;
   agent: string;
   language: string;
@@ -83,60 +92,64 @@ function TurnBlock({
   status?: string | null;
 }) {
   return (
-    <div className="space-y-3">
+    <section className="border-b border-rule py-7 last:border-b-0">
+      <p className="font-mono text-[11px] tracking-wide text-muted">
+        {String(index).padStart(2, "0")}
+      </p>
       {you && (
-        <div className="ml-8 rounded-2xl rounded-tr-md bg-white/6 px-4 py-3">
-          <p className="text-[11px] font-semibold tracking-wider text-white/35 uppercase">
+        <div className="mt-3">
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted">
             You
           </p>
-          <p className="mt-0.5 text-base leading-relaxed text-white/80">{you}</p>
+          <p className="mt-1 text-[15px] leading-relaxed text-ink/80">{you}</p>
         </div>
       )}
       {(agent || status || live) && (
-        <div
-          className={`mr-8 rounded-2xl rounded-tl-md px-4 py-3 ${
-            refused ? "bg-warm/10" : "bg-accent/10"
-          }`}
-        >
+        <div className="mt-5">
           <p
-            className={`text-[11px] font-semibold tracking-wider uppercase ${
-              refused ? "text-warm" : "text-white/35"
+            className={`text-[11px] font-medium uppercase tracking-[0.14em] ${
+              refused ? "text-accent" : "text-muted"
             }`}
           >
-            {refused ? "Declined" : "Agent"}
+            {refused ? "Declined" : "Answer"}
           </p>
           {status && !agent && (
-            <p className="mt-1 text-base text-white/50 italic">{status}</p>
+            <p className="mt-2 font-serif text-lg italic leading-relaxed text-muted">
+              {status}
+            </p>
           )}
           {agent && (
-            <p className="mt-0.5 text-lg leading-relaxed text-white/95" lang={language}>
+            <p
+              className={`mt-2 font-serif text-[1.2rem] leading-[1.65] ${
+                refused ? "text-accent" : "text-ink"
+              }`}
+              lang={language}
+            >
               {agent}
-              {live && <span className="ml-0.5 inline-block animate-pulse">▍</span>}
+              {live && (
+                <span className="ml-0.5 inline-block animate-pulse text-muted">▍</span>
+              )}
             </p>
           )}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
 export function CitationStrip({ response }: { response: AskResponse }) {
   if (response.citations.length === 0) return null;
   return (
-    <div className="mx-auto mt-4 w-full max-w-2xl">
-      <p className="mb-2 text-[11px] font-semibold tracking-wider text-white/30 uppercase">
-        Sources
-      </p>
-      <ul className="space-y-1.5">
-        {response.citations.map((citation) => (
-          <li
-            key={citation.chunk_id}
-            className="line-clamp-2 rounded-lg border border-edge/60 bg-raised/40 px-3 py-2 text-xs text-white/55"
-          >
-            {citation.text}
+    <footer className="mx-auto w-full max-w-xl border-t border-rule pt-4">
+      <p className="mb-3 font-mono text-[11px] tracking-wide text-muted">Notes</p>
+      <ol className="space-y-2">
+        {response.citations.map((citation, index) => (
+          <li key={citation.chunk_id} className="flex gap-3 text-xs leading-relaxed text-muted">
+            <span className="font-mono tabular-nums text-ink/50">{index + 1}.</span>
+            <span className="line-clamp-3">{citation.text}</span>
           </li>
         ))}
-      </ul>
-    </div>
+      </ol>
+    </footer>
   );
 }

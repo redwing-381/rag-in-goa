@@ -200,11 +200,28 @@ class RagPipeline:
 
     # -- entry points -----------------------------------------------------
 
-    def transcribe(self, audio: bytes, filename: str, trace: Trace) -> STTResult:
+    def transcribe(
+        self,
+        audio: bytes,
+        filename: str,
+        trace: Trace,
+        language: Language | None = None,
+    ) -> STTResult:
         if self.stt is None:
             raise RuntimeError("no speech-to-text client configured")
+        language_code = None
+        if language is not None:
+            language_code = {
+                Language.EN: "en-IN",
+                Language.HI: "hi-IN",
+                Language.BN: "bn-IN",
+                Language.TA: "ta-IN",
+                Language.MR: "mr-IN",
+            }.get(language)
         with timed(trace, "stt"):
-            return self.stt.transcribe(audio, filename=filename)
+            return self.stt.transcribe(
+                audio, filename=filename, language_code=language_code,
+            )
 
     def ask_audio(self, audio: bytes, language: Language = Language.EN,
                   filename: str = "audio.wav", **kwargs) -> AskResponse:
@@ -239,7 +256,7 @@ class RagPipeline:
         """Yield transcript, then the same events as `ask_iter`."""
         trace = Trace(request_id=uuid.uuid4().hex[:12])
         try:
-            stt = self.transcribe(audio, filename, trace)
+            stt = self.transcribe(audio, filename, trace, language=language)
         except Exception as exc:
             trace.add("stt_error", 0.0, error=str(exc)[:120])
             yield {"type": "stage", "name": "stt_error", "duration_ms": 0.0}

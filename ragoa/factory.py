@@ -77,7 +77,7 @@ def load_reranker(cfg: Settings):
 def load_retriever(
     index_dir: Path,
     encoder_kind: str = "st",
-    use_rerank: bool = True,
+    use_rerank: bool = False,
     use_sparse: bool = True,
     device: str | None = None,
     settings: Settings | None = None,
@@ -106,7 +106,7 @@ def load_retriever(
 def build_pipeline(
     index_dir: Path | None = None,
     encoder_kind: str = "st",
-    use_rerank: bool = True,
+    use_rerank: bool = False,
     use_sparse: bool = True,
     use_stt: bool = True,
     llm=None,
