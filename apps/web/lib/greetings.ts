@@ -1,18 +1,3 @@
-import type { Language } from "./types";
-
-/** Opening and closing lines, spoken with the same TTS path as answers.
-
-Spoken locally so a greeting does not wait on an LLM round-trip. The model
-still handles the questions in the middle of the conversation.
-*/
-export const OPENING: Record<Language, string> = {
-  en: "Hello. I can look up answers from the documents for you. What would you like to know?",
-  hi: "नमस्ते। मैं दस्तावेज़ों से आपके सवालों के जवाब ढूँढने में मदद करूँगा। आप क्या जानना चाहते हैं?",
-  bn: "নমস্কার। আমি নথি থেকে আপনার প্রশ্নের উত্তর খুঁজে দিতে এখানে আছি। আপনি কী জানতে চান?",
-  ta: "வணக்கம். ஆவணங்களிலிருந்து உங்கள் கேள்விகளுக்கு பதில் தேட நான் இங்கே இருக்கிறேன். நீங்கள் என்ன தெரிந்துகொள்ள விரும்புகிறீர்கள்?",
-  mr: "नमस्कार. दस्तऐवजांमधून तुमच्या प्रश्नांची उत्तरे शोधण्यासाठी मी इथे आहे. तुम्हाला काय जाणून घ्यायचे आहे?",
-};
-
 const QUESTION = /\b(what|who|whom|whose|which|where|when|why|how|is|are|was|were|do|does|did|can|could|would|should)\b/;
 
 const END_PHRASES = [
@@ -96,11 +81,3 @@ export function isEndCommand(raw: string): boolean {
     (phrase) => core === phrase || text === phrase || text.endsWith(` ${phrase}`),
   );
 }
-
-export const CLOSING: Record<Language, string> = {
-  en: "Thanks for chatting. Start again whenever you have another question. Goodbye.",
-  hi: "बात करने के लिए धन्यवाद। अगर और कुछ चाहिए हो तो नई बातचीत शुरू करें। अलविदा।",
-  bn: "কথা বলার জন্য ধন্যবাদ। আর কিছু লাগলে নতুন করে শুরু করুন। বিদায়।",
-  ta: "உரையாடியதற்கு நன்றி. மேலும் ஏதேனும் வேண்டுமானால் புதிய உரையாடலைத் தொடங்குங்கள். வணக்கம்.",
-  mr: "बोलण्यासाठी धन्यवाद. आणखी काही हवे असल्यास नवीन संवाद सुरू करा. नमस्कार.",
-};
