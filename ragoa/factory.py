@@ -130,6 +130,12 @@ def build_pipeline(
 
         stt = SarvamSTT(cfg)
 
+    translator = None
+    if cfg.sarvam_api_key:
+        from ragoa.stt.translate import SarvamTranslate
+
+        translator = SarvamTranslate(cfg)
+
     pipeline = RagPipeline(
         retriever=retriever,
         llm=llm or OpenRouterLLM(cfg),
@@ -138,6 +144,7 @@ def build_pipeline(
         # path, so a paraphrased-but-correct answer is not refused. No second model.
         output_gate=OutputGate(cfg, encoder=retriever.encoder),
         stt=stt,
+        translator=translator,
         settings=cfg,
     )
     return pipeline, manifest

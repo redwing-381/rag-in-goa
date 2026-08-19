@@ -94,6 +94,8 @@ class Settings(BaseSettings):
     sarvam_stt_model: str = "saaras:v3"
     sarvam_stt_mode: str = "translate"  # Indic speech -> English text in one call
     sarvam_timeout_s: float = 20.0
+    # Typed / tapped Indic questions need the same English bridge as STT.
+    sarvam_translate_url: str = "https://api.sarvam.ai/translate"
     sarvam_tts_url: str = "https://api.sarvam.ai/text-to-speech"
     sarvam_tts_model: str = "bulbul:v3"
     # Ishita is Sarvam's recommended conversational female voice for en-IN / ta-IN.

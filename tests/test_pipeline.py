@@ -43,6 +43,7 @@ class StubLLM:
     def answer(self, query, retrieved, language=Language.EN, history=None):
         self.calls += 1
         self.last_history = history
+        self.last_query = query
         top = retrieved[0]
         text = self.answer_text or " ".join(top.chunk.text.split()[:25])
         citations = self.citations if self.citations is not None else [top.chunk.chunk_id]
@@ -406,3 +407,45 @@ class TestAskIter:
         assert events[-1]["type"] == "final"
         assert events[-1]["response"].refused
         assert not any(event["type"] == "token" for event in events)
+
+
+class StubTranslate:
+    def __init__(self, english: str):
+        self.english = english
+        self.calls: list[tuple[str, Language]] = []
+
+    def to_english(self, text, source):
+        self.calls.append((text, source))
+        return self.english
+
+
+class TestTypedIndicQuery:
+    def test_translates_before_retrieve(self):
+        stub = StubLLM()
+        pipeline, _ = build(stub)
+        translator = StubTranslate("what is a corporation")
+        pipeline.translator = translator
+        response = pipeline.ask(AskRequest(
+            query="निगम क्या है", lang=Language.HI, top_k=3,
+        ))
+        assert translator.calls
+        assert translator.calls[0][1] is Language.HI
+        assert stub.last_query == "what is a corporation"
+        assert not response.refused
+        assert any(span.name == "translate_query" for span in response.trace.spans)
+
+    def test_english_query_skips_translate(self):
+        stub = StubLLM()
+        pipeline, _ = build(stub)
+        pipeline.translator = StubTranslate("should not be used")
+        response = pipeline.ask(AskRequest(query="what is a corporation"))
+        assert stub.last_query == "what is a corporation"
+        assert not any(span.name == "translate_query" for span in response.trace.spans)
+
+    def test_indic_without_translator_does_not_crash(self):
+        pipeline, _ = build()
+        assert pipeline.translator is None
+        response = pipeline.ask(AskRequest(
+            query="माउंट फ़ूजी किस प्रकार का पहाड़ है?", lang=Language.HI,
+        ))
+        assert response.answer

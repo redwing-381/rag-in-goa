@@ -24,7 +24,12 @@ from collections.abc import Iterator
 from ragoa.config import Settings
 from ragoa.guardrails.input_gate import InputGate
 from ragoa.guardrails.output_gate import OutputGate, content_words
-from ragoa.harness.llm import OpenRouterLLM, citations_from_prose, resolve_citations
+from ragoa.harness.llm import (
+    OpenRouterLLM,
+    citations_from_prose,
+    resolve_citations,
+    script_ratio,
+)
 from ragoa.index.retriever import HybridRetriever
 from ragoa.schemas import (
     AnswerPayload,
@@ -143,6 +148,18 @@ def evidence_overlaps_query(query: str, retrieved: list[RetrievedChunk]) -> bool
     return len(wanted & content_words(evidence)) >= need
 
 
+def looks_indic(text: str) -> bool:
+    """True when the typed query is mostly an Indic script we answer in.
+
+    Speech is already English after STT translate. Taps are not, and the
+    index is English-only, so this is the signal to translate before retrieve.
+    """
+    return any(
+        script_ratio(text, lang) >= 0.25
+        for lang in (Language.HI, Language.BN, Language.TA, Language.MR)
+    )
+
+
 def refusal_message(reason: RefusalReason, language: Language) -> str:
     per_language = REFUSAL_TEXT.get(reason, {})
     return per_language.get(language) or per_language.get(Language.EN) or "I cannot answer that."
@@ -156,6 +173,7 @@ class RagPipeline:
         input_gate: InputGate | None = None,
         output_gate: OutputGate | None = None,
         stt=None,
+        translator=None,
         settings: Settings | None = None,
     ):
         from ragoa.config import settings as default_settings
@@ -166,6 +184,7 @@ class RagPipeline:
         self.input_gate = input_gate or InputGate(self.settings)
         self.output_gate = output_gate or OutputGate(self.settings)
         self.stt = stt
+        self.translator = translator
 
     # -- helpers ----------------------------------------------------------
 
@@ -315,6 +334,14 @@ class RagPipeline:
             }
             return
 
+        # Typed Indic is not English yet. Retrieve (and prompt) on the
+        # translation; answer_language stays request.lang so the model replies
+        # in the language the user tapped.
+        search_query = self._english_query(request, trace)
+        if search_query != request.query:
+            request = request.model_copy(update={"query": search_query})
+        yield from flush_stages()
+
         # Retrieval, under its own hard deadline. This turn's query only.
         deadline = Deadline(request.budget_ms)
         retrieved = self.retriever.retrieve(
@@ -422,6 +449,17 @@ class RagPipeline:
                 yield {"type": "token", "text": payload.answer}
 
         return payload, llm_ms
+
+    def _english_query(self, request: AskRequest, trace: Trace) -> str:
+        query = request.query.strip()
+        if self.translator is None or not looks_indic(query):
+            return query
+        with timed(trace, "translate_query"):
+            try:
+                english = self.translator.to_english(query, request.lang)
+            except Exception:
+                return query
+        return (english or query).strip()
 
     def _after_generation(
         self,
