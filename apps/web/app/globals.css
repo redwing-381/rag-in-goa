@@ -6,6 +6,7 @@
   --color-rule: #d9d0c3;
   --color-muted: #6b6358;
   --color-raised: #ebe4d8;
+  --color-card: #faf6ee;
   --color-accent: #9c4221;
   --color-mint: #2f6b4f;
   --font-sans: var(--font-source-sans), ui-sans-serif, system-ui, sans-serif;
@@ -58,6 +59,12 @@ body {
 
 .bars-well[data-state="thinking"] {
   opacity: 0.72;
+}
+
+.hero-goa {
+  opacity: 0.7;
+  filter: sepia(0.42) saturate(0.38) hue-rotate(-18deg) brightness(1.08) contrast(0.95);
+  mix-blend-mode: multiply;
 }
 
 @media (prefers-reduced-motion: reduce) {

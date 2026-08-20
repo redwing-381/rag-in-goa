@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 
+import { InfoGlyph, SpeakerIcon } from "@/components/icons";
 import type { SessionTurn } from "@/lib/session";
 import type { Language } from "@/lib/types";
 
@@ -38,18 +39,9 @@ export function TranscriptPane({
   }, [turns.length, liveYou, liveAgent, liveStatus]);
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 sm:px-6 sm:py-8 lg:px-10">
+    <section className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
       {empty ? (
-        <div className="m-auto w-full max-w-xl">
-          <p className="font-serif text-xl leading-snug text-ink sm:text-2xl">
-            Ask a question the corpus can answer.
-          </p>
-          <p className="mt-3 max-w-md text-sm leading-relaxed text-muted">
-            Type a question, or tap to start and speak. Tap to stop, or pause
-            two seconds to send. Use tap to listen if you want the answer spoken.
-          </p>
-          {emptyExtra}
-        </div>
+        <div className="mx-auto w-full max-w-xl pb-6">{emptyExtra}</div>
       ) : (
         <article className="mx-auto w-full max-w-xl">
           {turns.map((turn, index) => (
@@ -150,14 +142,15 @@ function TurnBlock({
                 )}
               </p>
               {!live && id && (
-                <div className="mt-3 flex items-center gap-3">
+                <div className="mt-3 flex items-center gap-1">
                   {!refused && onListen && (
                     <button
                       type="button"
                       onClick={() => onListen(id, agent, language as Language)}
-                      className="font-mono text-[11px] tracking-wide text-accent underline-offset-4 hover:underline"
+                      aria-label={playing ? "Stop listening" : "Listen to the answer"}
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${playing ? "text-accent" : "text-muted"}`}
                     >
-                      {playing ? "Stop" : "Tap to listen"}
+                      <SpeakerIcon />
                     </button>
                   )}
                   {onInfo && (
@@ -165,9 +158,12 @@ function TurnBlock({
                       type="button"
                       onClick={() => onInfo(id)}
                       aria-label="Sources"
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-rule font-serif text-[13px] italic leading-none text-muted"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full px-1.5 text-muted"
                     >
-                      i
+                      <InfoGlyph />
+                      <span className="hidden font-mono text-[11px] tracking-wide lg:inline">
+                        Source
+                      </span>
                     </button>
                   )}
                 </div>

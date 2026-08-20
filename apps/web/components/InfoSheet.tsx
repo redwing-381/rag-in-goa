@@ -46,12 +46,12 @@ export function InfoSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby="info-sheet-title"
-        className="absolute inset-x-0 bottom-0 max-h-[78vh] overflow-y-auto border-t border-rule bg-paper px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 lg:inset-auto lg:left-1/2 lg:top-1/2 lg:w-[min(32rem,calc(100%-4rem))] lg:max-h-[70vh] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-sm lg:border lg:pb-6 lg:pt-5"
+        className="absolute inset-x-0 bottom-0 max-h-[78vh] overflow-y-auto rounded-t-3xl border-t border-rule bg-card px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 lg:inset-auto lg:left-1/2 lg:top-1/2 lg:w-[min(32rem,calc(100%-4rem))] lg:max-h-[70vh] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl lg:border lg:pb-6 lg:pt-5"
       >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-rule lg:hidden" />
-        <div className="mb-5 flex items-baseline justify-between gap-3">
+        <div className="mb-5 flex items-center justify-between gap-3">
           <h2 id="info-sheet-title" className="font-serif text-xl text-ink">
-            <span className="lg:hidden">Sources and timing</span>
+            <span className="lg:hidden">Timing and sources</span>
             <span className="hidden lg:inline">Sources</span>
           </h2>
           <button
@@ -63,23 +63,7 @@ export function InfoSheet({
           </button>
         </div>
 
-        <section className="lg:mb-0">
-          <p className="mb-3 font-mono text-[11px] tracking-wide text-muted">Notes</p>
-          {citations.length === 0 ? (
-            <p className="text-sm leading-relaxed text-muted">No passages cited for this turn.</p>
-          ) : (
-            <ol className="space-y-3">
-              {citations.map((citation, index) => (
-                <li key={citation.chunk_id} className="flex gap-3 text-sm leading-relaxed text-ink/75">
-                  <span className="font-mono tabular-nums text-muted">{index + 1}.</span>
-                  <span>{citation.translated_text || citation.text}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
-
-        <div className="mt-6 lg:hidden">
+        <div className="lg:hidden">
           {trace ? (
             <TracePanel trace={trace} budgetMs={budgetMs} alwaysOpen />
           ) : (
@@ -88,6 +72,22 @@ export function InfoSheet({
             </p>
           )}
         </div>
+
+        <section className="mt-6 lg:mt-0">
+          <p className="mb-3 font-mono text-[11px] tracking-wide text-muted">Sources</p>
+          {citations.length === 0 ? (
+            <p className="text-sm leading-relaxed text-muted">No passages cited for this turn.</p>
+          ) : (
+            <ol className="space-y-4">
+              {citations.map((citation, index) => (
+                <li key={citation.chunk_id} className="flex gap-3 text-sm leading-relaxed text-ink/75">
+                  <span className="w-4 shrink-0 font-mono tabular-nums text-muted">{index + 1}.</span>
+                  <span className="min-w-0">{citation.translated_text || citation.text}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
       </div>
     </div>
   );

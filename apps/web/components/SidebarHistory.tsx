@@ -7,15 +7,17 @@ export function SidebarHistory({
   selectedId,
   onSelect,
   onNewChat,
+  className = "flex h-full w-[220px] shrink-0 flex-col border-r border-rule",
 }: {
   turns: SessionTurn[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onNewChat: () => void;
+  className?: string;
 }) {
   return (
-    <aside className="flex h-full w-[220px] shrink-0 flex-col border-r border-rule">
-      <div className="flex items-baseline justify-between gap-2 border-b border-rule px-4 py-4">
+    <aside className={className}>
+      <div className="flex items-center justify-between gap-2 border-b border-rule px-4 py-4">
         <p className="font-mono text-[11px] tracking-wide text-muted">Contents</p>
         <button
           type="button"

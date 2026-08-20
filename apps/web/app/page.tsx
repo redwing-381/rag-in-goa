@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { AgentOrb, type OrbState } from "@/components/AgentOrb";
+import { type OrbState } from "@/components/AgentOrb";
+import { Composer } from "@/components/Composer";
+import { HeroCard } from "@/components/HeroCard";
+import { ChevronIcon, MenuIcon, SlidersIcon } from "@/components/icons";
+import { InfoSheet } from "@/components/InfoSheet";
 import { LiveStages } from "@/components/LiveStages";
 import { useRecordingClock } from "@/components/MicButton";
 import { SampleQuestions } from "@/components/SampleQuestions";
 import { SidebarHistory } from "@/components/SidebarHistory";
-import { InfoSheet } from "@/components/InfoSheet";
 import { TranscriptPane } from "@/components/TranscriptPane";
 import { TracePanel } from "@/components/TracePanel";
 import { ApiError, askAudioStream, askStream, health } from "@/lib/api";
@@ -54,6 +57,8 @@ export default function Page() {
   const [waitHint, setWaitHint] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [infoId, setInfoId] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const recorder = useRef<MicRecorder | null>(null);
   const vad = useRef<ReturnType<typeof createVad> | null>(null);
@@ -370,13 +375,6 @@ export default function Page() {
     });
   }, []);
 
-  const stopVoice = useCallback(() => {
-    stopSpeaking();
-    playingIdRef.current = null;
-    setPlayingId(null);
-    setOrb("idle");
-  }, []);
-
   const endVoiceChat = useCallback(() => {
     cycle.current += 1;
     abort.current?.abort();
@@ -408,6 +406,8 @@ export default function Page() {
     setFinalResponse(null);
     setError(null);
     setTyped("");
+    setMenuOpen(false);
+    setSettingsOpen(false);
   }, [haltCapture]);
 
   const live = orb !== "idle" || streaming;
@@ -417,31 +417,44 @@ export default function Page() {
   const refused = live ? draftRefused : Boolean(selected?.refused ?? draftRefused);
   const shownTrace = live ? finalResponse?.trace : (selected?.trace ?? finalResponse?.trace);
 
-  const docsLabel = service?.docs
-    ? `${service.docs.toLocaleString()} documents`
+  const corpusLine = service?.docs
+    ? `MS MARCO-XI · ${service.docs.toLocaleString()} documents`
     : "MS MARCO-XI";
 
   const qaTurns = turns.filter((turn) => (turn.kind ?? "qa") === "qa");
+  const lastTurn = qaTurns.at(-1) ?? null;
+  const lastPlayable = lastTurn && lastTurn.answer && !lastTurn.refused ? lastTurn : null;
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-paper text-ink">
-      <header className="shrink-0 border-b border-rule px-4 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] sm:px-5 lg:px-6 lg:py-3">
+      <header className="shrink-0 px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] sm:px-5 lg:px-6 lg:py-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="font-serif text-lg leading-none sm:text-xl">RAG in Goa</p>
-            <p className="mt-1 truncate font-mono text-[11px] tracking-wide text-muted">
-              MS MARCO-XI · {docsLabel}
-            </p>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              aria-label="Open contents"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink lg:hidden"
+            >
+              <MenuIcon />
+            </button>
+            <div className="min-w-0">
+              <p className="truncate font-sans text-[17px] font-semibold leading-none tracking-tight sm:text-lg">
+                RAG in Goa
+              </p>
+              <p className="mt-1 truncate text-[11px] tracking-wide text-muted">
+                {corpusLine}
+              </p>
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-3 sm:gap-4">
-            <label className="flex min-h-11 items-center gap-2 text-sm">
-              <span className="hidden font-mono text-[11px] text-muted sm:inline">Language</span>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <ServiceStatus service={service} error={serviceError} />
+            <label className="relative flex min-h-9 items-center rounded-full border border-rule bg-card px-3 text-sm">
+              <span className="sr-only">Language</span>
               <select
                 value={language}
                 onChange={(event) => setLanguage(event.target.value as Language)}
-                aria-label="Language"
-                className="min-h-11 max-w-[9.5rem] border-0 border-b border-rule bg-transparent py-1 text-sm text-ink
-                  focus:border-ink focus:outline-none sm:max-w-none"
+                className="max-w-[7.25rem] appearance-none bg-transparent py-1.5 pr-4 text-sm text-ink focus:outline-none sm:max-w-none"
               >
                 {LANGUAGES.map((entry) => (
                   <option key={entry.code} value={entry.code}>
@@ -449,41 +462,40 @@ export default function Page() {
                   </option>
                 ))}
               </select>
+              <ChevronIcon className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-muted" />
             </label>
-            <ServiceStatus service={service} error={serviceError} />
-            <button
-              type="button"
-              onClick={newChat}
-              className="min-h-11 font-mono text-[11px] text-muted underline-offset-2 hover:text-ink hover:underline lg:hidden"
-            >
-              Clear
-            </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setSettingsOpen((open) => !open)}
+                aria-label="Session settings"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-rule bg-card text-ink"
+              >
+                <SlidersIcon />
+              </button>
+              {settingsOpen && (
+                <>
+                  <button
+                    type="button"
+                    className="fixed inset-0 z-20"
+                    aria-label="Close settings"
+                    onClick={() => setSettingsOpen(false)}
+                  />
+                  <div className="absolute right-0 top-full z-30 mt-2 w-44 rounded-2xl border border-rule bg-card p-1.5 shadow-[0_12px_30px_-18px_rgba(28,25,21,0.5)]">
+                    <button
+                      type="button"
+                      onClick={newChat}
+                      className="w-full rounded-xl px-3 py-2.5 text-left text-sm text-ink hover:bg-raised"
+                    >
+                      Clear session
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </header>
-
-      {qaTurns.length > 0 && (
-        <nav className="shrink-0 overflow-x-auto border-b border-rule px-4 py-2 lg:hidden">
-          <ol className="flex min-w-max gap-2">
-            {qaTurns.map((turn, index) => (
-              <li key={turn.id}>
-                <button
-                  type="button"
-                  disabled={Boolean(live)}
-                  onClick={() => {
-                    if (live) return;
-                    setSelectedId(turn.id);
-                  }}
-                  className={`max-w-[11rem] truncate rounded-full border px-3 py-1.5 text-left text-[12px] leading-snug
-                    ${turn.id === selectedId ? "border-ink text-ink" : "border-rule text-muted"}`}
-                >
-                  {String(index + 1).padStart(2, "0")} · {turn.query}
-                </button>
-              </li>
-            ))}
-          </ol>
-        </nav>
-      )}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="hidden lg:block">
@@ -517,10 +529,11 @@ export default function Page() {
             onListen={playAnswer}
             onInfo={setInfoId}
             emptyExtra={
-              orb === "idle" && turns.length === 0 && !error ? (
+              turns.length === 0 && !inFlight ? (
                 <>
+                  <HeroCard />
                   {(!service?.ready || serviceError) && (
-                    <p className="mt-5 max-w-md text-sm leading-relaxed text-accent">
+                    <p className="mt-4 px-1 text-sm leading-relaxed text-accent">
                       If this page is still checking the API, or nothing works,
                       refresh the browser. The service may still be waking up.
                     </p>
@@ -533,9 +546,46 @@ export default function Page() {
               ) : undefined
             }
           />
+          <footer className="shrink-0 px-4 py-3 pb-[max(0.85rem,env(safe-area-inset-bottom))] sm:px-6 lg:px-8">
+            <Composer
+              typed={typed}
+              onTyped={setTyped}
+              onSubmit={() => void submitText(typed, language)}
+              placeholder={
+                orb === "idle"
+                  ? "Or type the question here..."
+                  : "Type is paused while the voice turn is running"
+              }
+              disabled={orb !== "idle" || !service?.ready}
+              orb={orb}
+              level={level}
+              seconds={seconds}
+              canPlay={Boolean(lastPlayable)}
+              playing={Boolean(lastPlayable && playingId === lastPlayable.id)}
+              onPlay={() => {
+                if (!lastPlayable) return;
+                playAnswer(lastPlayable.id, lastPlayable.answer, lastPlayable.lang);
+              }}
+              onMic={() => {
+                if (orb === "listening") void stopAndSend();
+                else void startListening();
+              }}
+              onEndChat={endVoiceChat}
+              error={error}
+              hintAction={
+                lastTurn
+                  ? {
+                      label: "Sources",
+                      onClick: () => setInfoId(lastTurn.id),
+                    }
+                  : undefined
+              }
+            />
+          </footer>
         </div>
 
-        <aside className="hidden h-full w-[300px] shrink-0 flex-col overflow-y-auto border-l border-rule px-4 py-4 lg:flex">
+        <aside className="hidden h-full w-[300px] shrink-0 flex-col overflow-y-auto border-l border-rule bg-card/40 px-4 py-4 lg:flex">
+          <p className="mb-3 font-sans text-[15px] text-ink">Timing</p>
           <LiveStages
             stages={stages}
             pending={streaming}
@@ -550,46 +600,40 @@ export default function Page() {
               />
             </div>
           ) : (
-            <p className="mt-4 font-mono text-[11px] leading-relaxed text-muted">
+            <p className="mt-2 text-sm leading-relaxed text-muted">
               Timings for the last turn land here.
             </p>
           )}
         </aside>
       </div>
 
-      <footer className="shrink-0 border-t border-rule px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-5 lg:px-6">
-        <div className="mx-auto flex w-full max-w-md flex-col items-center">
-          <AgentOrb
-            state={orb}
-            level={level}
-            seconds={seconds}
-            recover={orb === "idle" && Boolean(turns.at(-1)?.refused)}
-            disabled={!service?.ready}
-            onStart={() => void startListening()}
-            onStop={() => void stopAndSend()}
-            onStopSpeaking={stopVoice}
-            onEndChat={endVoiceChat}
+      {menuOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <button
+            type="button"
+            className="absolute inset-0 bg-ink/35"
+            aria-label="Close contents"
+            onClick={() => setMenuOpen(false)}
           />
-          <div className="mt-4 w-full sm:mt-5">
-            <input
-              value={typed}
-              onChange={(event) => setTyped(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void submitText(typed, language);
+          <div className="absolute inset-y-0 left-0 w-[min(20rem,86vw)] bg-paper pt-[env(safe-area-inset-top)] shadow-[8px_0_30px_-18px_rgba(28,25,21,0.45)]">
+            <SidebarHistory
+              className="flex h-full w-full flex-col"
+              turns={qaTurns}
+              selectedId={selectedId}
+              onSelect={(id) => {
+                if (live) return;
+                setSelectedId(id);
+                setMenuOpen(false);
               }}
-              placeholder={
-                orb === "idle"
-                  ? "Or type the question here"
-                  : "Type is paused while the voice turn is running"
-              }
-              disabled={orb !== "idle" || !service?.ready}
-              className="w-full border-0 border-b border-rule bg-transparent py-2.5 text-center text-base
-                text-ink placeholder:text-muted/70 focus:border-ink focus:outline-none disabled:opacity-40 sm:text-sm"
+              onNewChat={() => {
+                newChat();
+                setMenuOpen(false);
+              }}
             />
-            {error && <p className="mt-2 text-center text-sm text-accent">{error}</p>}
           </div>
         </div>
-      </footer>
+      )}
+
       <InfoSheet
         open={Boolean(infoTurn)}
         onClose={() => setInfoId(null)}
@@ -610,8 +654,8 @@ function ServiceStatus({
 }) {
   if (error) {
     return (
-      <p className="inline-flex max-w-[9rem] items-baseline gap-2 font-mono text-[11px] leading-snug text-accent sm:max-w-xs">
-        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+      <p className="inline-flex max-w-[9rem] items-center gap-2 font-mono text-[11px] leading-snug text-accent sm:max-w-xs">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
         <span className="sm:hidden">Refresh</span>
         <span className="hidden sm:inline">Cannot reach the API. Refresh the page.</span>
       </p>
