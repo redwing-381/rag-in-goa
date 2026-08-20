@@ -21,7 +21,7 @@ primary_region = 'sin'
 
 [[vm]]
   memory = '4gb'
-  cpu_kind = 'shared'
-  cpus = 2
+  cpu_kind = 'performance'
+  cpus = 1
   memory_mb = 4096
-  arch = 'arm64'
+  arch = 'amd64'
