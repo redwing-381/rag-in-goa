@@ -94,8 +94,8 @@ export function AgentOrb({
         />
       </div>
       <p
-        className={`mt-3 font-serif text-lg leading-none ${
-          listening ? "font-mono text-base tabular-nums text-accent" : "text-ink"
+        className={`mt-3 text-center font-serif text-base leading-snug sm:text-lg sm:leading-none ${
+          listening ? "font-mono text-sm tabular-nums text-accent sm:text-base" : "text-ink"
         }`}
       >
         {words.title}

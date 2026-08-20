@@ -28,17 +28,19 @@ export function SampleQuestions({
               type="button"
               disabled={disabled}
               onClick={() => onPick(sample.text, sample.lang)}
-              className="group flex w-full items-baseline gap-3 text-left disabled:cursor-not-allowed disabled:opacity-40"
+              className="group flex min-h-11 w-full items-start gap-3 text-left disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <span className="font-mono text-[11px] tabular-nums text-muted">
+              <span className="mt-0.5 font-mono text-[11px] tabular-nums text-muted">
                 {String(index + 1).padStart(2, "0")}
               </span>
-              <span className="shrink-0 text-[11px] text-accent">{sample.label}</span>
-              <span
-                lang={sample.lang}
-                className="text-[15px] leading-snug text-ink/80 underline-offset-4 group-hover:underline"
-              >
-                {sample.text}
+              <span className="min-w-0">
+                <span className="block text-[11px] text-accent">{sample.label}</span>
+                <span
+                  lang={sample.lang}
+                  className="mt-0.5 block text-[15px] leading-snug break-words text-ink/80 underline-offset-4 group-hover:underline"
+                >
+                  {sample.text}
+                </span>
               </span>
             </button>
           </li>

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, Source_Sans_3, Source_Serif_4 } from "next/font/google";
 
 import "./globals.css";
@@ -26,6 +26,12 @@ export const metadata: Metadata = {
   title: "RAG in Goa — voice questions over MS MARCO-XI",
   description:
     "Speak a question in English, Hindi, Bengali, Tamil or Marathi. Retrieval stays under a 200ms budget, and the system refuses when the corpus cannot support an answer.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

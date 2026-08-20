@@ -36,10 +36,10 @@ export function TranscriptPane({
   }, [turns.length, liveYou, liveAgent, liveStatus]);
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-8 lg:px-10">
+    <section className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 sm:px-6 sm:py-8 lg:px-10">
       {empty ? (
         <div className="m-auto w-full max-w-xl">
-          <p className="font-serif text-2xl leading-snug text-ink">
+          <p className="font-serif text-xl leading-snug text-ink sm:text-2xl">
             Ask a question the corpus can answer.
           </p>
           <p className="mt-3 max-w-md text-sm leading-relaxed text-muted">
@@ -134,7 +134,7 @@ function TurnBlock({
           {agent && (
             <>
               <p
-                className={`mt-2 font-serif text-[1.2rem] leading-[1.65] ${
+                className={`mt-2 font-serif text-lg leading-[1.65] sm:text-[1.2rem] ${
                   refused ? "text-accent" : "text-ink"
                 }`}
                 lang={language}

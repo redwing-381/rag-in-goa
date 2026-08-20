@@ -444,24 +444,27 @@ export default function Page() {
     ? `${service.docs.toLocaleString()} documents`
     : "MS MARCO-XI";
 
+  const qaTurns = turns.filter((turn) => (turn.kind ?? "qa") === "qa");
+
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-paper text-ink">
-      <header className="shrink-0 border-b border-rule px-5 py-3 lg:px-6">
-        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-          <div>
-            <p className="font-serif text-xl leading-none">RAG in Goa</p>
-            <p className="mt-1 font-mono text-[11px] tracking-wide text-muted">
+      <header className="shrink-0 border-b border-rule px-4 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] sm:px-5 lg:px-6 lg:py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-serif text-lg leading-none sm:text-xl">RAG in Goa</p>
+            <p className="mt-1 truncate font-mono text-[11px] tracking-wide text-muted">
               MS MARCO-XI · {docsLabel}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-4">
-            <label className="flex items-center gap-2 text-sm">
-              <span className="font-mono text-[11px] text-muted">Language</span>
+          <div className="flex shrink-0 items-center gap-3 sm:gap-4">
+            <label className="flex min-h-11 items-center gap-2 text-sm">
+              <span className="hidden font-mono text-[11px] text-muted sm:inline">Language</span>
               <select
                 value={language}
                 onChange={(event) => setLanguage(event.target.value as Language)}
-                className="border-0 border-b border-rule bg-transparent py-0.5 text-sm text-ink
-                  focus:border-ink focus:outline-none"
+                aria-label="Language"
+                className="min-h-11 max-w-[9.5rem] border-0 border-b border-rule bg-transparent py-1 text-sm text-ink
+                  focus:border-ink focus:outline-none sm:max-w-none"
               >
                 {LANGUAGES.map((entry) => (
                   <option key={entry.code} value={entry.code}>
@@ -474,7 +477,7 @@ export default function Page() {
             <button
               type="button"
               onClick={newChat}
-              className="font-mono text-[11px] text-muted underline-offset-2 hover:text-ink hover:underline lg:hidden"
+              className="min-h-11 font-mono text-[11px] text-muted underline-offset-2 hover:text-ink hover:underline lg:hidden"
             >
               Clear
             </button>
@@ -482,10 +485,33 @@ export default function Page() {
         </div>
       </header>
 
+      {qaTurns.length > 0 && (
+        <nav className="shrink-0 overflow-x-auto border-b border-rule px-4 py-2 lg:hidden">
+          <ol className="flex min-w-max gap-2">
+            {qaTurns.map((turn, index) => (
+              <li key={turn.id}>
+                <button
+                  type="button"
+                  disabled={Boolean(live)}
+                  onClick={() => {
+                    if (live) return;
+                    setSelectedId(turn.id);
+                  }}
+                  className={`max-w-[11rem] truncate rounded-full border px-3 py-1.5 text-left text-[12px] leading-snug
+                    ${turn.id === selectedId ? "border-ink text-ink" : "border-rule text-muted"}`}
+                >
+                  {String(index + 1).padStart(2, "0")} · {turn.query}
+                </button>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
+
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="hidden lg:block">
           <SidebarHistory
-            turns={turns.filter((turn) => (turn.kind ?? "qa") === "qa")}
+            turns={qaTurns}
             selectedId={selectedId}
             onSelect={(id) => {
               if (live) return;
@@ -530,7 +556,7 @@ export default function Page() {
             }
           />
           {shownResponse && !streaming && (
-            <div className="shrink-0 overflow-y-auto px-6 pb-4 lg:px-10">
+            <div className="shrink-0 overflow-y-auto px-4 pb-3 sm:px-6 lg:px-10 lg:pb-4">
               <CitationStrip response={shownResponse} />
             </div>
           )}
@@ -558,7 +584,7 @@ export default function Page() {
         </aside>
       </div>
 
-      <footer className="shrink-0 border-t border-rule px-5 py-5 lg:px-6">
+      <footer className="shrink-0 border-t border-rule px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-5 lg:px-6">
         <div className="mx-auto flex w-full max-w-md flex-col items-center">
           <AgentOrb
             state={orb}
@@ -571,7 +597,7 @@ export default function Page() {
             onStopSpeaking={stopVoice}
             onEndChat={endVoiceChat}
           />
-          <div className="mt-5 w-full">
+          <div className="mt-4 w-full sm:mt-5">
             <input
               value={typed}
               onChange={(event) => setTyped(event.target.value)}
@@ -584,8 +610,8 @@ export default function Page() {
                   : "Type is paused while the voice turn is running"
               }
               disabled={orb !== "idle" || !service?.ready}
-              className="w-full border-0 border-b border-rule bg-transparent py-2 text-center text-sm
-                text-ink placeholder:text-muted/70 focus:border-ink focus:outline-none disabled:opacity-40"
+              className="w-full border-0 border-b border-rule bg-transparent py-2.5 text-center text-base
+                text-ink placeholder:text-muted/70 focus:border-ink focus:outline-none disabled:opacity-40 sm:text-sm"
             />
             {error && <p className="mt-2 text-center text-sm text-accent">{error}</p>}
           </div>
@@ -604,16 +630,18 @@ function ServiceStatus({
 }) {
   if (error) {
     return (
-      <p className="inline-flex max-w-xs items-baseline gap-2 font-mono text-[11px] leading-snug text-accent">
+      <p className="inline-flex max-w-[9rem] items-baseline gap-2 font-mono text-[11px] leading-snug text-accent sm:max-w-xs">
         <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-        Cannot reach the API. Refresh the page.
+        <span className="sm:hidden">Refresh</span>
+        <span className="hidden sm:inline">Cannot reach the API. Refresh the page.</span>
       </p>
     );
   }
   if (!service) {
     return (
       <p className="font-mono text-[11px] text-muted">
-        checking the service… refresh if this stays
+        <span className="sm:hidden">…</span>
+        <span className="hidden sm:inline">checking the service… refresh if this stays</span>
       </p>
     );
   }
