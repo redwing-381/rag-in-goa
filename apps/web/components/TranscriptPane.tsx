@@ -16,6 +16,7 @@ export function TranscriptPane({
   emptyExtra,
   playingId,
   onListen,
+  onInfo,
 }: {
   turns: SessionTurn[];
   liveYou: string;
@@ -27,6 +28,7 @@ export function TranscriptPane({
   emptyExtra?: ReactNode;
   playingId?: string | null;
   onListen?: (id: string, text: string, lang: Language) => void;
+  onInfo?: (id: string) => void;
 }) {
   const bottom = useRef<HTMLDivElement>(null);
   const empty = turns.length === 0 && !liveYou && !liveAgent && !liveStatus;
@@ -61,6 +63,7 @@ export function TranscriptPane({
               refused={turn.refused}
               playing={playingId === turn.id}
               onListen={onListen}
+              onInfo={onInfo}
             />
           ))}
           {live && (
@@ -92,6 +95,7 @@ function TurnBlock({
   status,
   playing,
   onListen,
+  onInfo,
 }: {
   id?: string;
   index: number;
@@ -103,9 +107,10 @@ function TurnBlock({
   status?: string | null;
   playing?: boolean;
   onListen?: (id: string, text: string, lang: Language) => void;
+  onInfo?: (id: string) => void;
 }) {
   return (
-    <section className="border-b border-rule py-7 last:border-b-0">
+    <section className="border-b border-rule py-5 last:border-b-0 sm:py-7">
       <p className="font-mono text-[11px] tracking-wide text-muted">
         {String(index).padStart(2, "0")}
       </p>
@@ -144,14 +149,28 @@ function TurnBlock({
                   <span className="ml-0.5 inline-block animate-pulse text-muted">▍</span>
                 )}
               </p>
-              {!live && !refused && id && onListen && (
-                <button
-                  type="button"
-                  onClick={() => onListen(id, agent, language as Language)}
-                  className="mt-3 font-mono text-[11px] tracking-wide text-accent underline-offset-4 hover:underline"
-                >
-                  {playing ? "Stop" : "Tap to listen"}
-                </button>
+              {!live && id && (
+                <div className="mt-3 flex items-center gap-3">
+                  {!refused && onListen && (
+                    <button
+                      type="button"
+                      onClick={() => onListen(id, agent, language as Language)}
+                      className="font-mono text-[11px] tracking-wide text-accent underline-offset-4 hover:underline"
+                    >
+                      {playing ? "Stop" : "Tap to listen"}
+                    </button>
+                  )}
+                  {onInfo && (
+                    <button
+                      type="button"
+                      onClick={() => onInfo(id)}
+                      aria-label="Sources and timing"
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-rule font-serif text-[13px] italic leading-none text-muted lg:hidden"
+                    >
+                      i
+                    </button>
+                  )}
+                </div>
               )}
             </>
           )}

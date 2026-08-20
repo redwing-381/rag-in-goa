@@ -38,16 +38,33 @@ const DEGRADATION_COPY: Record<string, string> = {
 /** Stages that are ours to keep under 200ms, versus the upstream model call. */
 const EXTERNAL_STAGES = new Set(["stt", "stt_error", "llm"]);
 
-export function TracePanel({ trace, budgetMs }: { trace: Trace; budgetMs: number }) {
-  const [open, setOpen] = useState(false);
+export function TracePanel({
+  trace,
+  budgetMs,
+  alwaysOpen = false,
+}: {
+  trace: Trace;
+  budgetMs: number;
+  alwaysOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(alwaysOpen);
   const retrieval = trace.spans.filter((span) => !EXTERNAL_STAGES.has(span.name));
   const external = trace.spans.filter((span) => EXTERNAL_STAGES.has(span.name));
   const slowest = Math.max(...trace.spans.map((span) => span.duration_ms), 1);
 
   const withinBudget = trace.retrieval_ms <= budgetMs;
+  const expanded = alwaysOpen || open;
 
   return (
     <section>
+      {alwaysOpen ? (
+        <h2 className="font-mono text-[11px] tracking-wide text-muted">
+          How long that took
+          <span className={`ml-2 ${withinBudget ? "text-mint" : "text-accent"}`}>
+            · {trace.retrieval_ms.toFixed(0)} ms retrieval
+          </span>
+        </h2>
+      ) : (
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -61,15 +78,16 @@ export function TracePanel({ trace, budgetMs }: { trace: Trace; budgetMs: number
         </h2>
         <span className="text-[11px] text-muted">{open ? "hide" : "show"}</span>
       </button>
+      )}
 
-      {!open && (
+      {!expanded && (
         <p className="mt-1 text-xs text-muted">
           {withinBudget ? "Inside the 200 ms budget." : "Over the 200 ms budget."}
           {trace.llm_ttft_ms !== null && ` Generation ${trace.llm_ttft_ms.toFixed(0)} ms.`}
         </p>
       )}
 
-      {open && (
+      {expanded && (
         <>
       <header className="mb-4 mt-4 flex items-baseline justify-between gap-3">
         <p className="font-mono text-[11px] tracking-wide text-muted">Latency trace</p>

@@ -7,6 +7,7 @@ import { LiveStages } from "@/components/LiveStages";
 import { useRecordingClock } from "@/components/MicButton";
 import { SampleQuestions } from "@/components/SampleQuestions";
 import { SidebarHistory } from "@/components/SidebarHistory";
+import { InfoSheet } from "@/components/InfoSheet";
 import { CitationStrip, TranscriptPane } from "@/components/TranscriptPane";
 import { TracePanel } from "@/components/TracePanel";
 import { ApiError, askAudioStream, askStream, health } from "@/lib/api";
@@ -52,6 +53,7 @@ export default function Page() {
   const [finalResponse, setFinalResponse] = useState<AskResponse | null>(null);
   const [waitHint, setWaitHint] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [infoId, setInfoId] = useState<string | null>(null);
 
   const recorder = useRef<MicRecorder | null>(null);
   const vad = useRef<ReturnType<typeof createVad> | null>(null);
@@ -411,6 +413,7 @@ export default function Page() {
   const live = orb !== "idle" || streaming;
   const inFlight = streaming || Boolean(waitHint);
   const selected = turns.find((turn) => turn.id === selectedId) ?? null;
+  const infoTurn = turns.find((turn) => turn.id === infoId) ?? null;
   const refused = live ? draftRefused : Boolean(selected?.refused ?? draftRefused);
   const shownTrace = live ? finalResponse?.trace : (selected?.trace ?? finalResponse?.trace);
   const shownResponse: AskResponse | null = live
@@ -538,6 +541,7 @@ export default function Page() {
             live={inFlight}
             playingId={playingId}
             onListen={playAnswer}
+            onInfo={setInfoId}
             emptyExtra={
               orb === "idle" && turns.length === 0 && !error ? (
                 <>
@@ -556,7 +560,7 @@ export default function Page() {
             }
           />
           {shownResponse && !streaming && (
-            <div className="shrink-0 overflow-y-auto px-4 pb-3 sm:px-6 lg:px-10 lg:pb-4">
+            <div className="hidden shrink-0 overflow-y-auto px-4 pb-3 sm:px-6 lg:block lg:px-10 lg:pb-4">
               <CitationStrip response={shownResponse} />
             </div>
           )}
@@ -617,6 +621,13 @@ export default function Page() {
           </div>
         </div>
       </footer>
+      <InfoSheet
+        open={Boolean(infoTurn)}
+        onClose={() => setInfoId(null)}
+        citations={infoTurn?.citations ?? []}
+        trace={infoTurn?.trace ?? null}
+        budgetMs={service?.retrieval_budget_ms ?? 200}
+      />
     </div>
   );
 }
