@@ -3,7 +3,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
 import type { SessionTurn } from "@/lib/session";
-import type { AskResponse, Language } from "@/lib/types";
+import type { Language } from "@/lib/types";
 
 export function TranscriptPane({
   turns,
@@ -164,8 +164,8 @@ function TurnBlock({
                     <button
                       type="button"
                       onClick={() => onInfo(id)}
-                      aria-label="Sources and timing"
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-rule font-serif text-[13px] italic leading-none text-muted lg:hidden"
+                      aria-label="Sources"
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-rule font-serif text-[13px] italic leading-none text-muted"
                     >
                       i
                     </button>
@@ -177,22 +177,5 @@ function TurnBlock({
         </div>
       )}
     </section>
-  );
-}
-
-export function CitationStrip({ response }: { response: AskResponse }) {
-  if (response.citations.length === 0) return null;
-  return (
-    <footer className="mx-auto w-full max-w-xl border-t border-rule pt-4">
-      <p className="mb-3 font-mono text-[11px] tracking-wide text-muted">Notes</p>
-      <ol className="space-y-2">
-        {response.citations.map((citation, index) => (
-          <li key={citation.chunk_id} className="flex gap-3 text-xs leading-relaxed text-muted">
-            <span className="font-mono tabular-nums text-ink/50">{index + 1}.</span>
-            <span className="line-clamp-3">{citation.text}</span>
-          </li>
-        ))}
-      </ol>
-    </footer>
   );
 }

@@ -8,7 +8,7 @@ import { useRecordingClock } from "@/components/MicButton";
 import { SampleQuestions } from "@/components/SampleQuestions";
 import { SidebarHistory } from "@/components/SidebarHistory";
 import { InfoSheet } from "@/components/InfoSheet";
-import { CitationStrip, TranscriptPane } from "@/components/TranscriptPane";
+import { TranscriptPane } from "@/components/TranscriptPane";
 import { TracePanel } from "@/components/TracePanel";
 import { ApiError, askAudioStream, askStream, health } from "@/lib/api";
 import { MicRecorder, RecorderError } from "@/lib/recorder";
@@ -416,32 +416,6 @@ export default function Page() {
   const infoTurn = turns.find((turn) => turn.id === infoId) ?? null;
   const refused = live ? draftRefused : Boolean(selected?.refused ?? draftRefused);
   const shownTrace = live ? finalResponse?.trace : (selected?.trace ?? finalResponse?.trace);
-  const shownResponse: AskResponse | null = live
-    ? finalResponse
-    : selected && finalResponse && selected.id === selectedId
-      ? finalResponse
-      : selected
-        ? {
-            answer: selected.answer,
-            refused: selected.refused,
-            refusal_reason: null,
-            citations: selected.citations,
-            confidence: 0,
-            transcript: selected.transcript,
-            answer_language: selected.lang,
-            groundedness: null,
-            trace: selected.trace ?? {
-              request_id: selected.id,
-              spans: [],
-              degradations: [],
-              tool_calls: [],
-              retrieval_ms: 0,
-              llm_ttft_ms: null,
-              total_ms: 0,
-              cache_hit: false,
-            },
-          }
-        : finalResponse;
 
   const docsLabel = service?.docs
     ? `${service.docs.toLocaleString()} documents`
@@ -559,11 +533,6 @@ export default function Page() {
               ) : undefined
             }
           />
-          {shownResponse && !streaming && (
-            <div className="hidden shrink-0 overflow-y-auto px-4 pb-3 sm:px-6 lg:block lg:px-10 lg:pb-4">
-              <CitationStrip response={shownResponse} />
-            </div>
-          )}
         </div>
 
         <aside className="hidden h-full w-[300px] shrink-0 flex-col overflow-y-auto border-l border-rule px-4 py-4 lg:flex">

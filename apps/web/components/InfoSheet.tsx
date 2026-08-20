@@ -35,10 +35,10 @@ export function InfoSheet({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 lg:hidden">
+    <div className="fixed inset-0 z-50">
       <button
         type="button"
-        className="absolute inset-0 bg-ink/35"
+        className="absolute inset-0 bg-ink/35 lg:bg-ink/20"
         aria-label="Close sources"
         onClick={onClose}
       />
@@ -46,12 +46,13 @@ export function InfoSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby="info-sheet-title"
-        className="absolute inset-x-0 bottom-0 max-h-[78vh] overflow-y-auto border-t border-rule bg-paper px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3"
+        className="absolute inset-x-0 bottom-0 max-h-[78vh] overflow-y-auto border-t border-rule bg-paper px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 lg:inset-auto lg:left-1/2 lg:top-1/2 lg:w-[min(32rem,calc(100%-4rem))] lg:max-h-[70vh] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-sm lg:border lg:pb-6 lg:pt-5"
       >
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-rule" />
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-rule lg:hidden" />
         <div className="mb-5 flex items-baseline justify-between gap-3">
           <h2 id="info-sheet-title" className="font-serif text-xl text-ink">
-            Sources and timing
+            <span className="lg:hidden">Sources and timing</span>
+            <span className="hidden lg:inline">Sources</span>
           </h2>
           <button
             type="button"
@@ -62,7 +63,7 @@ export function InfoSheet({
           </button>
         </div>
 
-        <section className="mb-6">
+        <section className="lg:mb-0">
           <p className="mb-3 font-mono text-[11px] tracking-wide text-muted">Notes</p>
           {citations.length === 0 ? (
             <p className="text-sm leading-relaxed text-muted">No passages cited for this turn.</p>
@@ -78,13 +79,15 @@ export function InfoSheet({
           )}
         </section>
 
-        {trace ? (
-          <TracePanel trace={trace} budgetMs={budgetMs} alwaysOpen />
-        ) : (
-          <p className="font-mono text-[11px] leading-relaxed text-muted">
-            Timings show up after an answer lands.
-          </p>
-        )}
+        <div className="mt-6 lg:hidden">
+          {trace ? (
+            <TracePanel trace={trace} budgetMs={budgetMs} alwaysOpen />
+          ) : (
+            <p className="font-mono text-[11px] leading-relaxed text-muted">
+              Timings show up after an answer lands.
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
