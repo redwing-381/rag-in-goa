@@ -1,0 +1,118 @@
+{
+  "meta": {
+    "target_root": "/Users/solai/Documents/GitHub/rag-in-goa",
+    "generation_backend": "openrouter",
+    "generation_model_hint": "openai/gpt-oss-120b",
+    "language": "hin",
+    "split": "validation",
+    "num_answerable": 15,
+    "num_unanswerable": 15,
+    "num_examples": 30,
+    "num_chunks": 715,
+    "top_k": 5,
+    "seed": 42,
+    "num_errored": 0
+  },
+  "retrieval": {
+    "check": "retrieval (reference-based)",
+    "num_evaluated": 15,
+    "top_k": 5,
+    "cross_lingual": {
+      "recall_at_k": {
+        "1": 0.6667,
+        "3": 0.8667,
+        "5": 1.0
+      },
+      "mrr": 0.7889
+    },
+    "same_language": {
+      "recall_at_k": {
+        "1": 0.6667,
+        "3": 0.8667,
+        "5": 1.0
+      },
+      "mrr": 0.7889
+    }
+  },
+  "faithfulness": {
+    "check": "faithfulness / hallucination (reference-free, LLM-as-judge)",
+    "num_evaluated": 0,
+    "error": "Judge unavailable (missing key, auth failure, or quota) -- skipped."
+  },
+  "correctness": {
+    "check": "correctness (reference-based, LLM-as-judge)",
+    "num_evaluated": 0,
+    "error": "Judge unavailable (missing key, auth failure, or quota) -- skipped."
+  },
+  "reliability": {
+    "check": "reliability / \"lying factor\" (answerable-vs-answered 2x2)",
+    "num_answerable_evaluated": 15,
+    "num_unanswerable_evaluated": 15,
+    "false_refusal_rate": 0.1333,
+    "false_refusal_examples": [
+      {
+        "query": "what makes marsala wine special",
+        "expected_answer": "Marsala wine is used in many different Italian foods, but it is most famous for chicken marsala."
+      },
+      {
+        "query": "how old would dean martin be",
+        "expected_answer": "Dean Martin was 78 years old."
+      }
+    ],
+    "false_confidence_rate": 0.6667,
+    "false_confidence_examples": [
+      {
+        "query": "which medical schools do not accept gen chem ap credit",
+        "fabricated_answer": "The medical schools that have restrictions on using AP credit – and therefore may not accept a General Chemistry AP credit – include Cornell, Harvard, Johns Hopkins, Tufts, Meharry, Rochester, and MT."
+      },
+      {
+        "query": "when did the tuskegee airmen do",
+        "fabricated_answer": "The Tuskegee Airmen served during World War II, with their first combat mission occurring in April 1943 when the 99th Fighter Squadron was sent to North Africa."
+      },
+      {
+        "query": "who said everything has a cause, and the cause of a thing must be at least as real as the thing",
+        "fabricated_answer": "René Descartes said that everything has a cause and that the cause must be at least as real (or perfect) as its effect."
+      },
+      {
+        "query": "how long does it take for government college loans to be issued",
+        "fabricated_answer": "For federal (government) student loans, processing begins with the FAFSA and can take about 3 days to 3 weeks before the loan can be issued."
+      },
+      {
+        "query": "define expense pools",
+        "fabricated_answer": "Expense pools are groups of similar indirect costs that are accumulated together so they can be allocated as a lump sum to the projects or cost objects that benefit from them."
+      }
+    ]
+  },
+  "latency": {
+    "check": "latency",
+    "num_evaluated": 30,
+    "embed": {
+      "avg_ms": 8.54,
+      "p50_ms": 7.93,
+      "p95_ms": 14.42,
+      "p99_ms": 16.89
+    },
+    "search": {
+      "avg_ms": 0.23,
+      "p50_ms": 0.11,
+      "p95_ms": 0.37,
+      "p99_ms": 2.61
+    },
+    "retrieval_total": {
+      "avg_ms": 10.55,
+      "p50_ms": 10.38,
+      "p95_ms": 17.05,
+      "p99_ms": 20.69
+    },
+    "generation": {
+      "avg_ms": 675.23,
+      "p50_ms": 556.8,
+      "p95_ms": 1348.81,
+      "p99_ms": 1742.78
+    },
+    "retrieval_latency_budget_ms": 200.0,
+    "retrieval_within_budget": true,
+    "generation_latency_target_ms": 1500.0,
+    "generation_within_target": true
+  }
+}

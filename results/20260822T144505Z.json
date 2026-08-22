@@ -1,0 +1,114 @@
+{
+  "meta": {
+    "target_root": "/Users/solai/Documents/GitHub/rag-in-goa",
+    "generation_backend": "openrouter",
+    "generation_model_hint": "openai/gpt-oss-120b",
+    "language": "hin",
+    "split": "validation",
+    "num_answerable": 15,
+    "num_unanswerable": 15,
+    "num_examples": 30,
+    "num_chunks": 715,
+    "top_k": 5,
+    "seed": 42,
+    "num_errored": 0
+  },
+  "retrieval": {
+    "check": "retrieval (reference-based)",
+    "num_evaluated": 15,
+    "top_k": 5,
+    "cross_lingual": {
+      "recall_at_k": {
+        "1": 0.6667,
+        "3": 0.8667,
+        "5": 1.0
+      },
+      "mrr": 0.7856
+    },
+    "same_language": {
+      "recall_at_k": {
+        "1": 0.6667,
+        "3": 0.8667,
+        "5": 1.0
+      },
+      "mrr": 0.7856
+    }
+  },
+  "faithfulness": {
+    "check": "faithfulness / hallucination (reference-free, LLM-as-judge)",
+    "num_evaluated": 0,
+    "error": "Judge unavailable (missing key, auth failure, or quota) -- skipped."
+  },
+  "correctness": {
+    "check": "correctness (reference-based, LLM-as-judge)",
+    "num_evaluated": 0,
+    "error": "Judge unavailable (missing key, auth failure, or quota) -- skipped."
+  },
+  "reliability": {
+    "check": "reliability / \"lying factor\" (answerable-vs-answered 2x2)",
+    "num_answerable_evaluated": 15,
+    "num_unanswerable_evaluated": 15,
+    "false_refusal_rate": 0.0667,
+    "false_refusal_examples": [
+      {
+        "query": "what makes marsala wine special",
+        "expected_answer": "Marsala wine is used in many different Italian foods, but it is most famous for chicken marsala."
+      }
+    ],
+    "false_confidence_rate": 0.7333,
+    "false_confidence_examples": [
+      {
+        "query": "when did the tuskegee airmen do",
+        "fabricated_answer": "The Tuskegee Airmen served during World War II, with their first combat mission occurring in April 1943 when the 99th Fighter Squadron was sent to North Africa."
+      },
+      {
+        "query": "how much does it cost to repave a double driveway",
+        "fabricated_answer": "I’m sorry, but the provided information does not specify the cost to repave a double driveway."
+      },
+      {
+        "query": "who said everything has a cause, and the cause of a thing must be at least as real as the thing",
+        "fabricated_answer": "René Descartes argued that everything has a cause and that the cause must be at least as real (or perfect) as its effect."
+      },
+      {
+        "query": "how long does it take for government college loans to be issued",
+        "fabricated_answer": "Government (federal) student loans can take roughly 3 days to 3 weeks to be processed after the FAFSA is filed."
+      },
+      {
+        "query": "define expense pools",
+        "fabricated_answer": "Expense pools are groupings of similar indirect costs that are accumulated together so they can be allocated as a lump sum to the projects or cost objects that benefit from them."
+      }
+    ]
+  },
+  "latency": {
+    "check": "latency",
+    "num_evaluated": 30,
+    "embed": {
+      "avg_ms": 7.84,
+      "p50_ms": 6.34,
+      "p95_ms": 17.12,
+      "p99_ms": 20.87
+    },
+    "search": {
+      "avg_ms": 0.13,
+      "p50_ms": 0.1,
+      "p95_ms": 0.23,
+      "p99_ms": 0.75
+    },
+    "retrieval_total": {
+      "avg_ms": 7.16,
+      "p50_ms": 5.97,
+      "p95_ms": 16.2,
+      "p99_ms": 18.43
+    },
+    "generation": {
+      "avg_ms": 946.86,
+      "p50_ms": 669.43,
+      "p95_ms": 2053.16,
+      "p99_ms": 2205.82
+    },
+    "retrieval_latency_budget_ms": 200.0,
+    "retrieval_within_budget": true,
+    "generation_latency_target_ms": 1500.0,
+    "generation_within_target": false
+  }
+}

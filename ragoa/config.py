@@ -71,14 +71,14 @@ class Settings(BaseSettings):
     sparse_reserve_ms: float = 140.0
 
     # --- guardrail thresholds (calibrated by bench/guardrail_eval.py) ------
-    ood_score_threshold: float = 0.45
-    groundedness_threshold: float = 0.35
+    ood_score_threshold: float = 0.48
+    groundedness_threshold: float = 0.52
     min_transcript_chars: int = 3
     min_language_probability: float = 0.30
     # Below this, a generated answer is treated as a failure rather than shown.
     # The extractive fallback used to return 0.2 and a random passage; that
     # looked like an answer and was worse than a named refusal.
-    min_answer_confidence: float = 0.35
+    min_answer_confidence: float = 0.40
 
     # --- llm ---------------------------------------------------------------
     llm_model: str = "openai/gpt-oss-120b"

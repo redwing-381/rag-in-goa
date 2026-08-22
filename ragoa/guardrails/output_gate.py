@@ -130,13 +130,18 @@ class OutputGate:
         if ambiguous and self.encoder is not None:
             rescued = self._semantic_rescue([c for _, c in ambiguous], evidence)
             for (i, claim), similarity in zip(ambiguous, rescued, strict=True):
-                if similarity >= 0.60:
+                if similarity >= 0.65:
                     scores[i] = max(scores[i], similarity)
                 else:
                     unsupported.append(claim)
 
         score = float(np.mean(scores)) if scores else 0.0
-        grounded = not invalid and not unsupported and score >= cfg.groundedness_threshold
+        min_score = float(np.min(scores)) if scores else 0.0
+        grounded = (
+            not invalid
+            and not unsupported
+            and min_score >= cfg.groundedness_threshold
+        )
 
         return GroundednessReport(
             grounded=grounded, score=score,

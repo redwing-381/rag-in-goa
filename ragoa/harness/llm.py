@@ -61,8 +61,9 @@ SYSTEM_PROMPT = """You answer questions using only the numbered context passages
 
 Rules:
 - Use only facts present in the context. Never add outside knowledge.
-- If the context does not answer the question, set answer to a brief statement \
-that you do not have that information, and citations to an empty list.
+- If the passages do not directly answer the question, reply with a brief statement \
+that you do not have that information, set citations to [], and confidence below 0.5. \
+Do not guess from loosely related text.
 - Cite the bracketed number of every passage you used, e.g. ["1", "3"].
 - Write the entire answer in the language named by answer_language. For hi, bn, \
 ta, or mr that means the native script (Devanagari, Bengali, Tamil), not English. \

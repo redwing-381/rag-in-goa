@@ -1,0 +1,97 @@
+{
+  "meta": {
+    "target_root": "/Users/solai/Documents/GitHub/rag-in-goa",
+    "generation_backend": "openrouter",
+    "generation_model_hint": "openai/gpt-oss-120b",
+    "language": "hin",
+    "split": "validation",
+    "num_answerable": 3,
+    "num_unanswerable": 3,
+    "num_examples": 6,
+    "num_chunks": 133,
+    "top_k": 5,
+    "seed": 42,
+    "num_errored": 0
+  },
+  "retrieval": {
+    "check": "retrieval (reference-based)",
+    "num_evaluated": 3,
+    "top_k": 5,
+    "cross_lingual": {
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0
+      },
+      "mrr": 1.0
+    },
+    "same_language": {
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0
+      },
+      "mrr": 1.0
+    }
+  },
+  "faithfulness": {
+    "check": "faithfulness / hallucination (reference-free, LLM-as-judge)",
+    "num_evaluated": 0,
+    "error": "OPENAI_API_KEY not configured -- judge-based checks skipped."
+  },
+  "correctness": {
+    "check": "correctness (reference-based, LLM-as-judge)",
+    "num_evaluated": 0,
+    "error": "OPENAI_API_KEY not configured -- judge-based checks skipped."
+  },
+  "reliability": {
+    "check": "reliability / \"lying factor\" (answerable-vs-answered 2x2)",
+    "num_answerable_evaluated": 3,
+    "num_unanswerable_evaluated": 3,
+    "false_refusal_rate": 0.0,
+    "false_refusal_examples": [],
+    "false_confidence_rate": 0.6667,
+    "false_confidence_examples": [
+      {
+        "query": "what is wealth gov and econ definition",
+        "fabricated_answer": "Wealth is the value of all resources possessed by an individual or society, i.e., the aggregate value of everything owned that can be exchanged for money, goods, or services. The provided passages do "
+      },
+      {
+        "query": "what is the scorebridge app used for",
+        "fabricated_answer": "The Scorebridge app for Mac is a utility that lets users transfer files (the free version allows up to 10 files per transfer) and is aimed at users who tweak their system’s display settings."
+      }
+    ]
+  },
+  "latency": {
+    "check": "latency",
+    "num_evaluated": 6,
+    "embed": {
+      "avg_ms": 6.81,
+      "p50_ms": 6.79,
+      "p95_ms": 10.11,
+      "p99_ms": 11.68
+    },
+    "search": {
+      "avg_ms": 0.08,
+      "p50_ms": 0.07,
+      "p95_ms": 0.16,
+      "p99_ms": 0.17
+    },
+    "retrieval_total": {
+      "avg_ms": 7.19,
+      "p50_ms": 6.9,
+      "p95_ms": 11.15,
+      "p99_ms": 12.02
+    },
+    "generation": {
+      "avg_ms": 1063.87,
+      "p50_ms": 691.68,
+      "p95_ms": 2425.46,
+      "p99_ms": 2782.16
+    },
+    "retrieval_latency_budget_ms": 200.0,
+    "retrieval_within_budget": true,
+    "generation_latency_target_ms": 1500.0,
+    "generation_within_target": false
+  }
+}

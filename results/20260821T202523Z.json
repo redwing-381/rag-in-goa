@@ -1,0 +1,114 @@
+{
+  "meta": {
+    "target_root": "/Users/solai/Documents/GitHub/rag-in-goa",
+    "generation_backend": "openrouter",
+    "generation_model_hint": "openai/gpt-oss-120b",
+    "language": "hin",
+    "split": "validation",
+    "num_answerable": 15,
+    "num_unanswerable": 15,
+    "num_examples": 30,
+    "num_chunks": 715,
+    "top_k": 5,
+    "seed": 42,
+    "num_errored": 0
+  },
+  "retrieval": {
+    "check": "retrieval (reference-based)",
+    "num_evaluated": 15,
+    "top_k": 5,
+    "cross_lingual": {
+      "recall_at_k": {
+        "1": 0.6667,
+        "3": 0.8667,
+        "5": 1.0
+      },
+      "mrr": 0.7889
+    },
+    "same_language": {
+      "recall_at_k": {
+        "1": 0.6667,
+        "3": 0.8667,
+        "5": 1.0
+      },
+      "mrr": 0.7889
+    }
+  },
+  "faithfulness": {
+    "check": "faithfulness / hallucination (reference-free, LLM-as-judge)",
+    "num_evaluated": 0,
+    "error": "OPENAI_API_KEY not configured -- judge-based checks skipped."
+  },
+  "correctness": {
+    "check": "correctness (reference-based, LLM-as-judge)",
+    "num_evaluated": 0,
+    "error": "OPENAI_API_KEY not configured -- judge-based checks skipped."
+  },
+  "reliability": {
+    "check": "reliability / \"lying factor\" (answerable-vs-answered 2x2)",
+    "num_answerable_evaluated": 15,
+    "num_unanswerable_evaluated": 15,
+    "false_refusal_rate": 0.0667,
+    "false_refusal_examples": [
+      {
+        "query": "how old would dean martin be",
+        "expected_answer": "Dean Martin was 78 years old."
+      }
+    ],
+    "false_confidence_rate": 0.7333,
+    "false_confidence_examples": [
+      {
+        "query": "when did the tuskegee airmen do",
+        "fabricated_answer": "The Tuskegee Airmen served during World War II, with their first combat mission occurring in April 1943 when the 99th Fighter Squadron was sent to North Africa."
+      },
+      {
+        "query": "who said everything has a cause, and the cause of a thing must be at least as real as the thing",
+        "fabricated_answer": "René Descartes said that everything has a cause and that the cause must be at least as real (or perfect) as its effect."
+      },
+      {
+        "query": "how long does it take for government college loans to be issued",
+        "fabricated_answer": "Federal student loans generally require 3 days to 3 weeks for FAFSA processing, and the aid is then disbursed no earlier than 10 days before the first day of instruction."
+      },
+      {
+        "query": "define expense pools",
+        "fabricated_answer": "Expense pools are groupings of indirect costs that share a common cause or benefit, accumulated together so they can be allocated to cost objects or projects. They typically involve homogeneous costs "
+      },
+      {
+        "query": "how is cultural transmission theory related to the concentric zone hypothesis? .",
+        "fabricated_answer": "Cultural transmission theory argues that delinquent behavior is socially learned and passed on in disorganized urban areas, which corresponds to the concentric zone hypothesis that identifies inner‑ci"
+      }
+    ]
+  },
+  "latency": {
+    "check": "latency",
+    "num_evaluated": 30,
+    "embed": {
+      "avg_ms": 8.13,
+      "p50_ms": 7.45,
+      "p95_ms": 12.35,
+      "p99_ms": 15.18
+    },
+    "search": {
+      "avg_ms": 0.18,
+      "p50_ms": 0.1,
+      "p95_ms": 0.18,
+      "p99_ms": 1.88
+    },
+    "retrieval_total": {
+      "avg_ms": 7.89,
+      "p50_ms": 7.48,
+      "p95_ms": 12.19,
+      "p99_ms": 12.83
+    },
+    "generation": {
+      "avg_ms": 835.19,
+      "p50_ms": 711.92,
+      "p95_ms": 1737.0,
+      "p99_ms": 1761.32
+    },
+    "retrieval_latency_budget_ms": 200.0,
+    "retrieval_within_budget": true,
+    "generation_latency_target_ms": 1500.0,
+    "generation_within_target": false
+  }
+}
